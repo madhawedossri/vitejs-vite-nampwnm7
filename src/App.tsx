@@ -18,7 +18,7 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
 
 /* ---------------------------------------------------------------
-   بيانات الطالبات والمجموعات والفئات (الاعتماد على الاسم لضمان التزامن)
+   بيانات الطالبات والمجموعات والفئات
 --------------------------------------------------------------- */
 const NAMES = [
   'سارة', 'لين', 'جنى', 'دانة', 'رهف', 'لمى', 'غلا', 'وعد', 'تالا', 'ريم',
@@ -64,14 +64,11 @@ const SUPERVISORS = [
 ];
 
 const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
-const WEEK_ORDER = [6, 0, 1, 2, 3, 4, 5]; // السبت إلى الجمعة
+const WEEK_ORDER = [6, 0, 1, 2, 3, 4, 5];
 
 const MAX_OPTION_IDX = 13;
 const PROGRAM_START_DATE_KSA = '2026-08-29';
 
-/* ---------------------------------------------------------------
-   حساب التوقيت الهجري (تبدأ الدورة الجديدة الساعة 4:30 عصراً)
---------------------------------------------------------------- */
 const CUTOFF_HOUR = 16;
 const CUTOFF_MIN = 30;
 
@@ -94,14 +91,13 @@ function useCycleClock() {
   const cycleEnd = new Date(cycleStart);
   cycleEnd.setDate(cycleEnd.getDate() + 1);
 
-  // تنسيق التاريخ الهجري بدون السنة (اليوم والشهر فقط)
   const formattedDate = cycleStart.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { 
     day: 'numeric', 
     month: 'long', 
     timeZone: 'Asia/Riyadh' 
   });
   
-  const dayNameOfWeek = DAY_NAMES[cycleStart.getDay() === 0 ? 0 : cycleStart.getDay() === 1 ? 1 : cycleStart.getDay() === 2 ? 2 : cycleStart.getDay() === 3 ? 3 : cycleStart.getDay() === 4 ? 4 : cycleStart.getDay() === 5 ? 5 : 6];
+  const dayNameOfWeek = DAY_NAMES[cycleStart.getDay()];
 
   const startDateObj = new Date(PROGRAM_START_DATE_KSA + 'T16:30:00');
   const programDayIndex = Math.floor((cycleStart.getTime() - startDateObj.getTime()) / 86400000);
@@ -119,11 +115,9 @@ function formatDuration(ms) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
   return [
     String(hours).padStart(2, '0'),
     String(minutes).padStart(2, '0'),
-    String(seconds).padStart(2, '0'),
   ].join(':');
 }
 
@@ -217,22 +211,20 @@ function computeGroupAverages(selectedOptionIdx, wedChallengeText, daily, weekly
   return { coral: avg(sums.coral), pearl: avg(sums.pearl) };
 }
 
-const PINS_KEY = `student-pins-v2`;
+const PINS_KEY = `student-pins-v4`;
 
-async function loadJSON(key) {
+async function loadPins() {
   try {
-    const snap = await getDoc(doc(db, 'wird', key));
+    const snap = await getDoc(doc(db, 'wird', PINS_KEY));
     if (!snap.exists()) return {};
-    const value = snap.data().value;
-    return value ? JSON.parse(value) : {};
+    return JSON.parse(snap.data().value || '{}');
   } catch (e) { return {}; }
 }
 
-async function saveJSON(key, data) {
+async function savePins(data) {
   try {
-    await setDoc(doc(db, 'wird', key), { value: JSON.stringify(data) });
-    return true;
-  } catch (e) { return false; }
+    await setDoc(doc(db, 'wird', PINS_KEY), { value: JSON.stringify(data) });
+  } catch (e) {}
 }
 
 function PearlBar({ percent, count = 10, big = false }) {
@@ -336,7 +328,6 @@ function CelebrationModal({ onClose }) {
   );
 }
 
-/* شريط علوي يوضح اليوم والتاريخ الهجري بدون سنة والشريط البرتقالي للوقت */
 function TopBar({ onExit, title, formattedDate, dayNameOfWeek, countdownMs }) {
   return (
     <div style={{ width: '100%', marginBottom: '16px' }}>
@@ -349,7 +340,6 @@ function TopBar({ onExit, title, formattedDate, dayNameOfWeek, countdownMs }) {
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '18px', fontWeight: '800', color: '#0f766e' }}>{title}</div>
 
-          {/* عرض اليوم والتاريخ الهجري (اليوم والشهر فقط) بوضوح */}
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -435,15 +425,15 @@ function StudentFlow({ onExit }) {
   const [pinInput, setPinInput] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
   const [pinError, setPinError] = useState('');
-  const [daily, setDaily] = useState({});
-  const [weekly, setWeekly] = useState({});
-  const [wedChallengeText, setWedChallengeText] = useState('');
+  
+  // الحالة العامة الموحدة للسحابة
+  const [cloudData, setCloudData] = useState({ daily: {}, weekly: {}, challenges: {} });
   const [showCelebration, setShowCelebration] = useState(false);
 
   const availableDays = useMemo(() => buildAvailableDays(), []);
   const selectedOptionIdx = useMemo(() => clampToProgramRange(clock.programDayIndex), [clock.programDayIndex]);
 
-  useEffect(() => { loadJSON(PINS_KEY).then((data) => setPins(data || {})); }, []);
+  useEffect(() => { loadPins().then((data) => setPins(data || {})); }, []);
 
   useEffect(() => {
     const savedStudentId = localStorage.getItem('saved_student_id');
@@ -453,28 +443,31 @@ function StudentFlow({ onExit }) {
     }
   }, []);
 
-  const currentDailyKey = `wird-daily_option_${selectedOptionIdx}`;
-  const currentWeeklyKey = `wird-weekly_week_1`;
-  const currentWedChallengeKey = `wed-challenge_week_${Math.floor(selectedOptionIdx / 7) + 1}`;
+  // مستند سحابي رئيسي واحد يجمع كل شيء لضمان عدم حدوث أي تشتت أو ضياع في البيانات
+  const masterDocId = `master-state-v4-opt-${selectedOptionIdx}`;
 
   useEffect(() => {
-    const unsubDaily = onSnapshot(doc(db, 'wird', currentDailyKey), (snap) => {
-      if (snap.exists() && snap.data().value) setDaily(JSON.parse(snap.data().value));
-      else setDaily({});
+    const unsubscribe = onSnapshot(doc(db, 'wird', masterDocId), (snap) => {
+      if (snap.exists()) {
+        setCloudData(snap.data() || { daily: {}, weekly: {}, challenges: {} });
+      } else {
+        setCloudData({ daily: {}, weekly: {}, challenges: {} });
+      }
     });
+    return () => unsubscribe();
+  }, [masterDocId]);
 
-    const unsubWeekly = onSnapshot(doc(db, 'wird', currentWeeklyKey), (snap) => {
-      if (snap.exists() && snap.data().value) setWeekly(JSON.parse(snap.data().value));
-      else setWeekly({});
-    });
-
-    const unsubWed = onSnapshot(doc(db, 'wird', currentWedChallengeKey), (snap) => {
-      if (snap.exists() && snap.data().value) setWedChallengeText(snap.data().value);
-      else setWedChallengeText('');
-    });
-
-    return () => { unsubDaily(); unsubWeekly(); unsubWed(); };
-  }, [currentDailyKey, currentWeeklyKey, currentWedChallengeKey]);
+  const updateCloudState = async (newDaily, newWeekly) => {
+    const updated = {
+      ...cloudData,
+      daily: newDaily || cloudData.daily || {},
+      weekly: newWeekly || cloudData.weekly || {},
+    };
+    setCloudData(updated); // تحديث فوري محلي
+    try {
+      await setDoc(doc(db, 'wird', masterDocId), updated);
+    } catch (e) {}
+  };
 
   const submitPin = async () => {
     if (!pendingStudent || !pins) return;
@@ -497,7 +490,7 @@ function StudentFlow({ onExit }) {
       }
       const updated = { ...pins, [pendingStudent.id]: pinInput };
       setPins(updated);
-      await saveJSON(PINS_KEY, updated);
+      await savePins(updated);
       setStudent(pendingStudent);
       localStorage.setItem('saved_student_id', pendingStudent.id);
     }
@@ -506,49 +499,51 @@ function StudentFlow({ onExit }) {
   const studentAvailableDays = useMemo(() => {
     if (!student) return availableDays;
     return availableDays.filter(d => {
-      if (d.realDayIdx === 4) {
-        return student.tier === 'third';
-      }
+      if (d.realDayIdx === 4) return student.tier === 'third';
       return true;
     });
   }, [availableDays, student]);
 
+  const wedChallengeText = cloudData.challenges?.[Math.floor(selectedOptionIdx / 7) + 1] || '';
   const items = student ? getVisibleItems(selectedOptionIdx, student.tier, wedChallengeText, studentAvailableDays) : [];
-  const myDaily = student ? daily?.[student.id] : null;
-  const myWeekly = student ? weekly?.[student.id] : null;
+  
+  const myDaily = student ? cloudData.daily?.[student.id] : null;
+  const myWeekly = student ? cloudData.weekly?.[student.id] : null;
   const percent = useMemo(() => percentFor(items, myDaily, myWeekly), [items, myDaily, myWeekly]);
-  const groupAverages = useMemo(() => computeGroupAverages(selectedOptionIdx, wedChallengeText, daily, weekly, availableDays, STUDENTS), [selectedOptionIdx, wedChallengeText, daily, weekly, availableDays]);
+  const groupAverages = useMemo(() => computeGroupAverages(selectedOptionIdx, wedChallengeText, cloudData.daily, cloudData.weekly, availableDays, STUDENTS), [selectedOptionIdx, wedChallengeText, cloudData, availableDays]);
 
   const toggleItem = async (item) => {
     if (!student) return;
     if (item.weekly) {
-      const currentEntry = weekly[student.id] || {};
-      const currentItem = currentEntry[item.id] || { completed: false, completedAt: null };
+      const currentWeekObj = cloudData.weekly || {};
+      const studentWeeklyEntry = currentWeekObj[student.id] || {};
+      const currentItem = studentWeeklyEntry[item.id] || { completed: false, completedAt: null };
       const nowCompleted = !currentItem.completed;
+      
       const updatedWeekly = {
-        ...weekly,
+        ...currentWeekObj,
         [student.id]: {
-          ...currentEntry,
+          ...studentWeeklyEntry,
           [item.id]: { completed: nowCompleted, completedAt: nowCompleted ? new Date().toISOString() : null }
         }
       };
-      setWeekly(updatedWeekly);
-      await saveJSON(currentWeeklyKey, updatedWeekly);
+      await updateCloudState(cloudData.daily, updatedWeekly);
       if (percentFor(items, myDaily, updatedWeekly[student.id]) === 100) setShowCelebration(true);
     } else {
-      const current = daily[student.id] || { items: {}, completedAt: null };
-      const newItems = { ...current.items, [item.id]: !current.items[item.id] };
+      const currentDailyObj = cloudData.daily || {};
+      const studentDailyEntry = currentDailyObj[student.id] || { items: {}, completedAt: null };
+      const newItems = { ...(studentDailyEntry.items || {}), [item.id]: !studentDailyEntry.items?.[item.id] };
+      
       const newPercent = percentFor(items, { items: newItems }, myWeekly);
       const updatedDaily = {
-        ...daily,
+        ...currentDailyObj,
         [student.id]: {
           items: newItems,
-          completedAt: newPercent === 100 ? current.completedAt || new Date().toISOString() : null
+          completedAt: newPercent === 100 ? studentDailyEntry.completedAt || new Date().toISOString() : null
         }
       };
-      setDaily(updatedDaily);
-      await saveJSON(currentDailyKey, updatedDaily);
-      if (newPercent === 100 && current.completedAt == null) setShowCelebration(true);
+      await updateCloudState(updatedDaily, cloudData.weekly);
+      if (newPercent === 100 && !studentDailyEntry.completedAt) setShowCelebration(true);
     }
   };
 
@@ -618,14 +613,14 @@ function StudentFlow({ onExit }) {
 
   const sortedTeammates = [...teammates].map((t) => {
     const tItems = getVisibleItems(selectedOptionIdx, t.tier, wedChallengeText, availableDays);
-    const tPercent = percentFor(tItems, daily[t.id], weekly[t.id]);
-    const completedAt = daily[t.id]?.completedAt || null;
+    const tPercent = percentFor(tItems, cloudData.daily?.[t.id], cloudData.weekly?.[t.id]);
+    const completedAt = cloudData.daily?.[t.id]?.completedAt || null;
     return { ...t, tPercent, completedAt };
   }).sort((a, b) => {
     if (a.tPercent === 100 && b.tPercent !== 100) return -1;
     if (a.tPercent !== 100 && b.tPercent === 100) return 1;
     if (a.tPercent === 100 && b.tPercent === 100) {
-      return new Date(a.completedAt) - new Date(b.completedAt);
+      return new Date(a.completedAt || 0) - new Date(b.completedAt || 0);
     }
     return 0;
   });
@@ -799,63 +794,68 @@ function SupervisorFlow({ onExit }) {
 
 function SupervisorDashboard({ onExit, supervisor }) {
   const clock = useCycleClock();
-  const [daily, setDaily] = useState({});
-  const [weekly, setWeekly] = useState({});
+  const [cloudData, setCloudData] = useState({ daily: {}, weekly: {}, challenges: {} });
   const [pins, setPins] = useState({});
   const [groupFilter, setGroupFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [wedDraft, setWedDraft] = useState('');
+  const [savingChallenge, setSavingChallenge] = useState(false);
 
   const supervisorAvailableDays = useMemo(() => buildAvailableDays(), []);
   const selectedOptionIdx = useMemo(() => clampToProgramRange(clock.programDayIndex), [clock.programDayIndex]);
-
-  const currentDailyKey = `wird-daily_option_${selectedOptionIdx}`;
-  const currentWeeklyKey = `wird-weekly_week_1`;
-  const currentWedChallengeKey = `wed-challenge_week_${Math.floor(selectedOptionIdx / 7) + 1}`;
-  const [wedChallengeText, setWedChallengeText] = useState('');
+  const masterDocId = `master-state-v4-opt-${selectedOptionIdx}`;
 
   useEffect(() => {
-    const unsubDaily = onSnapshot(doc(db, 'wird', currentDailyKey), (snap) => {
-      if (snap.exists() && snap.data().value) setDaily(JSON.parse(snap.data().value));
-      else setDaily({});
+    const unsubscribe = onSnapshot(doc(db, 'wird', masterDocId), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() || { daily: {}, weekly: {}, challenges: {} };
+        setCloudData(data);
+        const currentWeekNum = Math.floor(selectedOptionIdx / 7) + 1;
+        if (data.challenges?.[currentWeekNum]) {
+          setWedDraft(data.challenges[currentWeekNum]);
+        }
+      }
     });
+    loadPins().then((data) => setPins(data || {}));
+    return () => unsubscribe();
+  }, [masterDocId, selectedOptionIdx]);
 
-    const unsubWeekly = onSnapshot(doc(db, 'wird', currentWeeklyKey), (snap) => {
-      if (snap.exists() && snap.data().value) setWeekly(JSON.parse(snap.data().value));
-      else setWeekly({});
-    });
-
-    const unsubWed = onSnapshot(doc(db, 'wird', currentWedChallengeKey), (snap) => {
-      if (snap.exists() && snap.data().value) setWedChallengeText(snap.data().value);
-      else setWedChallengeText('');
-    });
-
-    loadJSON(PINS_KEY).then((data) => setPins(data || {}));
-
-    return () => { unsubDaily(); unsubWeekly(); unsubWed(); };
-  }, [currentDailyKey, currentWeeklyKey, currentWedChallengeKey]);
+  const saveWedChallenge = async () => {
+    setSavingChallenge(true);
+    const currentWeekNum = Math.floor(selectedOptionIdx / 7) + 1;
+    const updatedChallenges = { ...(cloudData.challenges || {}), [currentWeekNum]: wedDraft };
+    const updatedState = { ...cloudData, challenges: updatedChallenges };
+    setCloudData(updatedState);
+    try {
+      await setDoc(doc(db, 'wird', masterDocId), updatedState);
+    } catch (e) {}
+    setSavingChallenge(false);
+  };
 
   const resetPin = async (studentId) => {
     const updated = { ...pins };
     delete updated[studentId];
     setPins(updated);
-    await saveJSON(PINS_KEY, updated);
+    await savePins(updated);
   };
+
+  const wedChallengeText = cloudData.challenges?.[Math.floor(selectedOptionIdx / 7) + 1] || '';
 
   const rows = useMemo(() => {
     return STUDENTS.map((s) => {
       const items = getVisibleItems(selectedOptionIdx, s.tier, wedChallengeText, supervisorAvailableDays);
-      const percent = percentFor(items, daily[s.id], weekly[s.id]);
-      const hasCumulative = !!weekly[s.id]?.cumulativeReview?.completed;
-      return { ...s, percent, hasCumulative, completedAt: daily[s.id]?.completedAt || null };
+      const percent = percentFor(items, cloudData.daily?.[s.id], cloudData.weekly?.[s.id]);
+      const hasCumulative = !!cloudData.weekly?.[s.id]?.cumulativeReview?.completed;
+      return { ...s, percent, hasCumulative, completedAt: cloudData.daily?.[s.id]?.completedAt || null };
     });
-  }, [daily, weekly, selectedOptionIdx, wedChallengeText, supervisorAvailableDays]);
+  }, [cloudData, selectedOptionIdx, wedChallengeText, supervisorAvailableDays]);
 
-  const groupAverages = useMemo(() => computeGroupAverages(selectedOptionIdx, wedChallengeText, daily, weekly, supervisorAvailableDays, STUDENTS), [selectedOptionIdx, wedChallengeText, daily, weekly, supervisorAvailableDays]);
+  const groupAverages = useMemo(() => computeGroupAverages(selectedOptionIdx, wedChallengeText, cloudData.daily, cloudData.weekly, supervisorAvailableDays, STUDENTS), [selectedOptionIdx, wedChallengeText, cloudData, supervisorAvailableDays]);
 
   const leaderboard = useMemo(() => {
     return rows
       .filter((r) => r.completedAt)
-      .sort((a, b) => new Date(a.completedAt) - new Date(b.completedAt))
+      .sort((a, b) => new Date(a.completedAt || 0) - new Date(b.completedAt || 0))
       .slice(0, 3);
   }, [rows]);
 
@@ -864,7 +864,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
       if (a.percent === 100 && b.percent !== 100) return -1;
       if (a.percent !== 100 && b.percent === 100) return 1;
       if (a.percent === 100 && b.percent === 100) {
-        return new Date(a.completedAt) - new Date(b.completedAt);
+        return new Date(a.completedAt || 0) - new Date(b.completedAt || 0);
       }
       return 0;
     });
@@ -879,6 +879,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
   });
 
   const optionObj = supervisorAvailableDays.find(d => d.idx === selectedOptionIdx);
+  const actualDayIdx = optionObj ? optionObj.realDayIdx : 0;
   const isRestDay = !optionObj;
 
   return (
@@ -892,6 +893,26 @@ function SupervisorDashboard({ onExit, supervisor }) {
       />
 
       <GroupRace coralPercent={groupAverages.coral} pearlPercent={groupAverages.pearl} />
+
+      {!isRestDay && actualDayIdx === 3 && (
+        <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe', marginBottom: '16px' }}>
+          <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '13px', margin: '0 0 8px 0' }}>✍️ كتابة تحدي الأربعاء</h3>
+          <textarea
+            value={wedDraft}
+            onChange={(e) => setWedDraft(e.target.value)}
+            placeholder="اكتبي تحدي الأربعاء هنا..."
+            rows={2}
+            style={{ width: '100%', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '8px', fontSize: '12px', resize: 'none', boxSizing: 'border-box' }}
+          />
+          <button
+            onClick={saveWedChallenge}
+            disabled={savingChallenge}
+            style={{ width: '100%', backgroundColor: '#0f766e', color: '#ffffff', border: 'none', padding: '8px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer' }}
+          >
+            {savingChallenge ? 'جارِ الحفظ...' : 'حفظ تحدي الأربعاء'}
+          </button>
+        </div>
+      )}
 
       <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe', marginBottom: '16px' }}>
         <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '13px', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
