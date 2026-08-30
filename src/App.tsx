@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Trophy, X, ArrowRight, Lock, ChevronDown } from 'lucide-react';
+import { Trophy, X, ArrowRight, Lock } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 
@@ -66,16 +66,11 @@ const SUPERVISORS = [
 const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 const WEEK_ORDER = [6, 0, 1, 2, 3, 4, 5]; // السبت إلى الجمعة
 
-// أقصى رقم يوم متاح بالبرنامج (14 يوماً = أسبوعان)، ونفس الرقم يُستخدم في الطالبة والمشرفة
-// حتى تتطابق مفاتيح الحفظ بينهما دائماً
 const MAX_OPTION_IDX = 13;
-
-// تاريخ بداية الأسبوع الأول (أول يوم سبت بالبرنامج) بتوقيت السعودية
-// عدّلي هذا التاريخ فقط إذا تغيّر تاريخ انطلاق البرنامج مستقبلاً
 const PROGRAM_START_DATE_KSA = '2026-08-29';
 
 /* ---------------------------------------------------------------
-   حساب التوقيت (بالتاريخ الهجري الصريح) + رقم اليوم الفعلي بالبرنامج
+   حساب التوقيت ورقم اليوم الفعلي بالبرنامج
 --------------------------------------------------------------- */
 const CUTOFF_HOUR = 16;
 const CUTOFF_MIN = 30;
@@ -99,12 +94,9 @@ function useCycleClock() {
   const cycleEnd = new Date(cycleStart);
   cycleEnd.setDate(cycleEnd.getDate() + 1);
 
-  const realDayOfWeek = cycleStart.getDay(); // 0: الأحد، 1: الاثنين ... 6: السبت
-
+  const realDayOfWeek = cycleStart.getDay();
   const formattedDate = cycleStart.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' });
 
-  // رقم اليوم الفعلي منذ بداية البرنامج (0 = أول سبت). هذا هو المرجع الوحيد
-  // لتحديد اليوم/الأسبوع الحالي بدل تخمين "أقرب يوم بنفس الاسم"
   const startDateObj = new Date(PROGRAM_START_DATE_KSA + 'T00:00:00');
   const startMidnight = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate());
   const cycleMidnight = new Date(cycleStart.getFullYear(), cycleStart.getMonth(), cycleStart.getDate());
@@ -129,7 +121,6 @@ function formatDuration(ms) {
   ].join(':');
 }
 
-// تحويل رقم اليوم الفعلي بالبرنامج إلى رقم خيار صالح (idx) ضمن الحدود المتاحة
 function clampToProgramRange(programDayIndex) {
   return Math.min(Math.max(programDayIndex, 0), MAX_OPTION_IDX);
 }
@@ -168,7 +159,6 @@ function getVisibleItems(selectedOptionIdx, tier, wedChallengeText, availableDay
     items.push({ id: 'tafsir', label: 'التفسير', desc: 'قراءة تفسير النصاب.', emoji: '📖', weekly: false });
   }
 
-  // مراجعة السابق: ثلاثة أيام فقط (الأحد، الاثنين، الثلاثاء)
   if ([0, 1, 2].includes(actualDayIdx)) {
     let reviewDesc = '';
     if (actualDayIdx === 0) reviewDesc = 'مراجعة مقرر السبت مرتين ذاتياً';
@@ -178,17 +168,14 @@ function getVisibleItems(selectedOptionIdx, tier, wedChallengeText, availableDay
     items.push({ id: 'review', label: 'مراجعة السابق', desc: reviewDesc, emoji: '🐬', weekly: false });
   }
 
-  // المراجعة الكبرى: من السبت للثلاثاء، لطالبات الدفعة الثانية والدورة الثالثة
   if ((tier === 'second' || tier === 'third') && [6, 0, 1, 2].includes(actualDayIdx)) {
     items.push({ id: 'majorReview', label: 'المراجعة الكبرى', desc: 'خاص بطالبات الدفعة الثانية والدورة الثالثة', emoji: '⭐️', weekly: false });
   }
 
-  // المراجعة التراكمية: من السبت للخميس (كل أيام الأسبوع ما عدا الجمعة)، لطالبات الدورة الثالثة فقط
   if (tier === 'third' && [6, 0, 1, 2, 3, 4].includes(actualDayIdx)) {
     items.push({ id: 'cumulativeReview', label: 'المراجعة التراكمية', desc: 'خاص بطالبات الدورة الثالثة', emoji: '⛓️✨', weekly: true });
   }
 
-  // يوم الأربعاء الثابت
   if (actualDayIdx === 3) {
     items.push({
       id: 'wedChallenge',
@@ -350,7 +337,7 @@ function CelebrationModal({ onClose }) {
   );
 }
 
-function TopBar({ onExit, title, formattedDate, countdownMs, selectedOptionIdx, setSelectedOptionIdx, availableDays, showDropdown = true, staticDayLabel = null }) {
+function TopBar({ onExit, title, formattedDate, countdownMs, staticDayLabel }) {
   return (
     <div style={{ width: '100%', marginBottom: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -362,49 +349,19 @@ function TopBar({ onExit, title, formattedDate, countdownMs, selectedOptionIdx, 
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '18px', fontWeight: '800', color: '#0f766e' }}>{title}</div>
 
-          {showDropdown && availableDays && (
-            <div style={{ position: 'relative', display: 'inline-block', marginTop: '6px' }}>
-              <select
-                value={selectedOptionIdx}
-                onChange={(e) => setSelectedOptionIdx(Number(e.target.value))}
-                style={{
-                  appearance: 'none',
-                  backgroundColor: '#ccfbf1',
-                  color: '#0f766e',
-                  border: '1px solid #99f6e4',
-                  borderRadius: '12px',
-                  padding: '6px 32px 6px 14px',
-                  fontSize: '13px',
-                  fontWeight: '800',
-                  cursor: 'pointer',
-                  textAlign: 'center'
-                }}
-              >
-                {availableDays.map((d) => (
-                  <option key={d.idx} value={d.idx}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={14} color="#0f766e" style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-            </div>
-          )}
-
-          {!showDropdown && staticDayLabel && (
-            <div style={{
-              display: 'inline-block',
-              marginTop: '6px',
-              backgroundColor: '#ccfbf1',
-              color: '#0f766e',
-              border: '1px solid #99f6e4',
-              borderRadius: '12px',
-              padding: '6px 14px',
-              fontSize: '13px',
-              fontWeight: '800',
-            }}>
-              {staticDayLabel}
-            </div>
-          )}
+          <div style={{
+            display: 'inline-block',
+            marginTop: '6px',
+            backgroundColor: '#ccfbf1',
+            color: '#0f766e',
+            border: '1px solid #99f6e4',
+            borderRadius: '12px',
+            padding: '6px 14px',
+            fontSize: '13px',
+            fontWeight: '800',
+          }}>
+            {staticDayLabel}
+          </div>
 
           {formattedDate && <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>📅 {formattedDate}</div>}
         </div>
@@ -478,8 +435,7 @@ function StudentFlow({ onExit }) {
     });
   }, [availableDays, student]);
 
-  // اليوم مقفول تلقائياً على اليوم الفعلي الحالي فقط (حسب تاريخ البرنامج الحقيقي)
-  // ولا يمكن للطالبة اختيار يوم آخر أو رؤية أيام قادمة
+  // اليوم مقفول تلقائياً على اليوم الحالي الفعلي للجميع بدون إمكانية تغيير
   const selectedOptionIdx = useMemo(() => clampToProgramRange(clock.programDayIndex), [clock.programDayIndex]);
 
   useEffect(() => { loadJSON(PINS_KEY).then((data) => setPins(data || {})); }, []);
@@ -623,7 +579,7 @@ function StudentFlow({ onExit }) {
     }
     return (
       <div>
-        <TopBar onExit={onExit} title="اختاري اسمكِ" showDropdown={false} />
+        <TopBar onExit={onExit} title="اختاري اسمكِ" staticDayLabel="تسجيل الدخول" />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', maxHeight: '480px', overflowY: 'auto', paddingLeft: '4px' }}>
           {STUDENTS.map((s) => {
             const badge = TIER_BADGE[s.tier];
@@ -663,7 +619,7 @@ function StudentFlow({ onExit }) {
 
   const completedTeammatesList = sortedTeammates.filter(t => t.tPercent === 100);
   const currentOptionObj = studentAvailableDays.find(d => d.idx === selectedOptionIdx);
-  const isRestDay = !currentOptionObj; // يوم الجمعة، أو الخميس لغير طالبات الدورة الثالثة
+  const isRestDay = !currentOptionObj;
 
   return (
     <div>
@@ -673,7 +629,6 @@ function StudentFlow({ onExit }) {
         title={`أهلاً، ${student.name} ${g.emoji}`}
         formattedDate={clock.formattedDate}
         countdownMs={clock.msRemaining}
-        showDropdown={false}
         staticDayLabel={isRestDay ? 'يوم راحة 🌙' : currentOptionObj.name}
       />
 
@@ -840,12 +795,10 @@ function SupervisorDashboard({ onExit, supervisor }) {
   const [groupFilter, setGroupFilter] = useState('all');
   const [search, setSearch] = useState('');
 
-  // نفس قائمة الأيام الكاملة (السبت للخميس، أربعة أسابيع) تبقى متاحة للمشرفة بالكامل
   const supervisorAvailableDays = useMemo(() => buildAvailableDays(), []);
 
-  // نفس الحساب التلقائي المعتمد على التاريخ الفعلي المستخدم عند الطالبة، حتى تتطابق
-  // القيمة الافتراضية بين الطرفين تلقائياً؛ وتقدر المشرفة تتنقل يدوياً من القائمة بعدها
-  const [selectedOptionIdx, setSelectedOptionIdx] = useState(() => clampToProgramRange(clock.programDayIndex));
+  // المشرفة مثل الطالبة، مربوطة حصرياً باليوم الحالي الفعلي لضمان التزامن الفوري بنسبة 100%
+  const selectedOptionIdx = useMemo(() => clampToProgramRange(clock.programDayIndex), [clock.programDayIndex]);
 
   const currentDailyKey = `wird-daily_option_${selectedOptionIdx}`;
   const currentWeeklyKey = `wird-weekly_week_1`;
@@ -930,6 +883,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
 
   const optionObj = supervisorAvailableDays.find(d => d.idx === selectedOptionIdx);
   const actualDayIdx = optionObj ? optionObj.realDayIdx : 0;
+  const isRestDay = !optionObj;
 
   return (
     <div>
@@ -938,14 +892,12 @@ function SupervisorDashboard({ onExit, supervisor }) {
         title={`أهلاً ${supervisor.name} 🪸`}
         formattedDate={clock.formattedDate}
         countdownMs={clock.msRemaining}
-        selectedOptionIdx={selectedOptionIdx}
-        setSelectedOptionIdx={setSelectedOptionIdx}
-        availableDays={supervisorAvailableDays}
+        staticDayLabel={isRestDay ? 'يوم راحة 🌙' : optionObj.name}
       />
 
       <GroupRace coralPercent={groupAverages.coral} pearlPercent={groupAverages.pearl} />
 
-      {actualDayIdx === 3 && (
+      {!isRestDay && actualDayIdx === 3 && (
         <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe', marginBottom: '16px' }}>
           <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '13px', margin: '0 0 8px 0' }}>✍️ كتابة تحدي الأربعاء</h3>
           <textarea
