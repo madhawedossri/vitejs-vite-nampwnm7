@@ -91,10 +91,14 @@ function useCycleClock() {
   const cycleEnd = new Date(cycleStart);
   cycleEnd.setDate(cycleEnd.getDate() + 1);
 
+  // معرفة اليوم الفعلي الحالي لتحديد المؤشر الافتراضي بدقة
+  const realDayOfWeek = cycleStart.getDay(); // 0: الأحد، 1: الاثنين ... 6: السبت
+
   const formattedDate = cycleStart.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' });
 
   return {
     now,
+    realDayOfWeek,
     formattedDate,
     msRemaining: cycleEnd.getTime() - now.getTime(),
   };
@@ -110,57 +114,42 @@ function formatDuration(ms) {
   ].join(':');
 }
 
-function getVisibleItems(selectedOptionIdx, tier, wedChallengeText, customDailyChallenge, availableDays) {
+function getVisibleItems(selectedOptionIdx, tier, wedChallengeText, availableDays) {
   const items = [];
   const optionObj = availableDays.find(d => d.idx === selectedOptionIdx);
   if (!optionObj) return items;
   const actualDayIdx = optionObj.realDayIdx;
 
-  // البنود الأساسية (لجميع الأيام ما عدا الجمعة)
-  if ([6, 0, 1, 2, 3, 4].includes(actualDayIdx)) {
+  if ([0, 1, 2, 6].includes(actualDayIdx)) {
     items.push({ id: 'listen', label: 'سماع المقرر', desc: 'سماع النصاب 3 مرات من الشيخ.', emoji: '🎧', weekly: false });
     items.push({ id: 'recite', label: 'السرد مع رفيقة', desc: 'سرده مرتين بدون خطأ أو تنبيه أو لحن.', emoji: '🪸', weekly: false });
     items.push({ id: 'repeat', label: 'التكرار الذاتي', desc: 'التكرار 7 مرات (تسجيل صوتي أو بالورقة).', emoji: '🫧', weekly: false });
     items.push({ id: 'tafsir', label: 'التفسير', desc: 'قراءة تفسير النصاب.', emoji: '📖', weekly: false });
 
-    // المراجعة السابقة (الأحد، الاثنين، الثلاثاء)
-    if (actualDayIdx === 0) {
-      items.push({ id: 'review', label: 'مراجعة السابق', desc: 'مراجعة مقرر السبت مرتين ذاتياً', emoji: '🐬', weekly: false });
-    } else if (actualDayIdx === 1) {
-      items.push({ id: 'review', label: 'مراجعة السابق', desc: 'مراجعة مقرر السبت والأحد مرتين ذاتياً', emoji: '🐬', weekly: false });
-    } else if (actualDayIdx === 2) {
-      items.push({ id: 'review', label: 'مراجعة السابق', desc: 'مراجعة مقرر السبت والأحد والاثنين مرتين ذاتياً', emoji: '🐬', weekly: false });
-    }
+    let reviewDesc = 'مراجعة الورد السابق';
+    if (actualDayIdx === 6) reviewDesc = 'مراجعة مقرر السبت مرتين ذاتياً';
+    else if (actualDayIdx === 0) reviewDesc = 'مراجعة مقرر السبت والأحد مرتين ذاتياً';
+    else if (actualDayIdx === 1) reviewDesc = 'مراجعة مقرر السبت والاثنين مرتين ذاتياً';
+
+    items.push({ id: 'review', label: 'مراجعة السابق', desc: reviewDesc, emoji: '🐬', weekly: false });
   }
 
-  // المراجعة الكبرى: للدفعة الثانية والدورة الثالثة (من السبت للثلاثاء: 6، 0، 1، 2)
-  if ((tier === 'second' || tier === 'third') && [6, 0, 1, 2].includes(actualDayIdx)) {
+  if ((tier === 'second' || tier === 'third') && [6, 0, 1, 2, 3].includes(actualDayIdx)) {
     items.push({ id: 'majorReview', label: 'المراجعة الكبرى', desc: 'خاص بطالبات الدفعة الثانية والدورة الثالثة', emoji: '⭐️', weekly: false });
   }
 
-  // المراجعة التراكمية: لطالبات الدورة الثالثة فقط (من السبت للخميس: 6، 0، 1، 2، 3، 4)
-  if (tier === 'third' && [6, 0, 1, 2, 3, 4].includes(actualDayIdx)) {
-    items.push({ id: 'cumulativeReview', label: 'المراجعة التراكمية', desc: 'خاص بطالبات الدورة الثالثة', emoji: '⛓️✨', weekly: true });
+  // يوم الخميس (actualDayIdx === 4): خاص لطالبات التراكمية فقط
+  if (tier === 'third' && actualDayIdx === 4) {
+    items.push({ id: 'cumulativeReview', label: 'المراجعة التراكمية', desc: 'خاص بطالبات الدورة الثالثة — تُنجز في يوم الخميس', emoji: '⛓️✨', weekly: true });
   }
 
-  // تحدي الأربعاء الثابت (يوم الأربعاء: 3)
+  // يوم الأربعاء الثابت
   if (actualDayIdx === 3) {
     items.push({
       id: 'wedChallenge',
       label: 'تحدي الأربعاء',
       desc: wedChallengeText && wedChallengeText.trim() ? wedChallengeText : 'بانتظار المشرفة لكتابة تحدي الأربعاء...',
       emoji: '🦪',
-      weekly: false,
-    });
-  }
-
-  // التحدي اليومي الإضافي من المشرفة
-  if (customDailyChallenge && customDailyChallenge.trim()) {
-    items.push({
-      id: 'customChallenge',
-      label: 'تحدي المشرفة',
-      desc: customDailyChallenge,
-      emoji: '⭐',
       weekly: false,
     });
   }
@@ -179,10 +168,10 @@ function percentFor(items, dailySaved, weeklySaved) {
   return Math.round((done / items.length) * 100);
 }
 
-function computeGroupAverages(selectedOptionIdx, wedChallengeText, customDailyChallenge, daily, weekly, availableDays, studentList) {
+function computeGroupAverages(selectedOptionIdx, wedChallengeText, daily, weekly, availableDays, studentList) {
   const sums = { coral: [], pearl: [] };
   studentList.forEach((s) => {
-    const items = getVisibleItems(selectedOptionIdx, s.tier, wedChallengeText, customDailyChallenge, availableDays);
+    const items = getVisibleItems(selectedOptionIdx, s.tier, wedChallengeText, availableDays);
     const percent = percentFor(items, daily?.[s.id], weekly?.[s.id]);
     sums[s.group].push(percent);
   });
@@ -414,10 +403,9 @@ function StudentFlow({ onExit }) {
   const [daily, setDaily] = useState({});
   const [weekly, setWeekly] = useState({});
   const [wedChallengeText, setWedChallengeText] = useState('');
-  const [customChallengeText, setCustomChallengeText] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
 
-  // توليد الأيام بدون يوم الجمعة
+  // توليد الأيام بدون يوم الجمعة (استبعاد realDayIdx === 5)
   const availableDays = useMemo(() => {
     const list = [];
     const maxAllowedOptionIdx = 13;
@@ -425,7 +413,7 @@ function StudentFlow({ onExit }) {
       WEEK_ORDER.forEach((realDayIdx, i) => {
         const optionIdx = (w - 1) * 7 + i;
         if (optionIdx <= maxAllowedOptionIdx) {
-          if (realDayIdx !== 5) { // استبعاد الجمعة تماماً
+          if (realDayIdx !== 5) {
             const dayLabel = DAY_NAMES[realDayIdx];
             list.push({
               idx: optionIdx,
@@ -440,7 +428,6 @@ function StudentFlow({ onExit }) {
     return list;
   }, []);
 
-  // تصفية الأيام: يوم الخميس (realDayIdx === 4) يظهر فقط لطالبات الدورة الثالثة (التراكمية)
   const studentAvailableDays = useMemo(() => {
     if (!student) return availableDays;
     return availableDays.filter(d => {
@@ -451,7 +438,11 @@ function StudentFlow({ onExit }) {
     });
   }, [availableDays, student]);
 
-  const [selectedOptionIdx, setSelectedOptionIdx] = useState(0);
+  // تعيين اليوم الافتراضي بناءً على اليوم الحالي الفعلي في الجهاز
+  const [selectedOptionIdx, setSelectedOptionIdx] = useState(() => {
+    const match = availableDays.find(d => d.realDayIdx === clock.realDayOfWeek);
+    return match ? match.idx : 0;
+  });
 
   useEffect(() => { loadJSON(PINS_KEY).then((data) => setPins(data || {})); }, []);
 
@@ -463,10 +454,10 @@ function StudentFlow({ onExit }) {
     }
   }, []);
 
+  // مفتاح تخزين فريد ومستقل تماماً لكل يوم وكل أسبوع لضمان عدم تداخل الإنجازات
   const currentDailyKey = `wird-daily_option_${selectedOptionIdx}`;
   const currentWeeklyKey = `wird-weekly_week_1`;
   const currentWedChallengeKey = `wed-challenge_week_${Math.floor(selectedOptionIdx / 7) + 1}`;
-  const currentCustomChallengeKey = `custom-challenge_option_${selectedOptionIdx}`;
 
   useEffect(() => {
     if (!student) return;
@@ -486,13 +477,8 @@ function StudentFlow({ onExit }) {
       else setWedChallengeText('');
     });
 
-    const unsubCustom = onSnapshot(doc(db, 'wird', currentCustomChallengeKey), (snap) => {
-      if (snap.exists() && snap.data().value) setCustomChallengeText(snap.data().value);
-      else setCustomChallengeText('');
-    });
-
-    return () => { unsubDaily(); unsubWeekly(); unsubWed(); unsubCustom(); };
-  }, [student, currentDailyKey, currentWeeklyKey, currentWedChallengeKey, currentCustomChallengeKey]);
+    return () => { unsubDaily(); unsubWeekly(); unsubWed(); };
+  }, [student, currentDailyKey, currentWeeklyKey, currentWedChallengeKey]);
 
   const submitPin = async () => {
     if (!pendingStudent || !pins) return;
@@ -521,11 +507,11 @@ function StudentFlow({ onExit }) {
     }
   };
 
-  const items = student ? getVisibleItems(selectedOptionIdx, student.tier, wedChallengeText, customChallengeText, studentAvailableDays) : [];
+  const items = student ? getVisibleItems(selectedOptionIdx, student.tier, wedChallengeText, studentAvailableDays) : [];
   const myDaily = student ? daily?.[student.id] : null;
   const myWeekly = student ? weekly?.[student.id] : null;
   const percent = useMemo(() => percentFor(items, myDaily, myWeekly), [items, myDaily, myWeekly]);
-  const groupAverages = useMemo(() => computeGroupAverages(selectedOptionIdx, wedChallengeText, customChallengeText, daily, weekly, studentAvailableDays, STUDENTS), [selectedOptionIdx, wedChallengeText, customChallengeText, daily, weekly, studentAvailableDays]);
+  const groupAverages = useMemo(() => computeGroupAverages(selectedOptionIdx, wedChallengeText, daily, weekly, studentAvailableDays, STUDENTS), [selectedOptionIdx, wedChallengeText, daily, weekly, studentAvailableDays]);
 
   const toggleItem = async (item) => {
     if (!student) return;
@@ -625,7 +611,7 @@ function StudentFlow({ onExit }) {
   const g = GROUPS[student.group];
 
   const sortedTeammates = [...teammates].map((t) => {
-    const tItems = getVisibleItems(selectedOptionIdx, t.tier, wedChallengeText, customChallengeText, studentAvailableDays);
+    const tItems = getVisibleItems(selectedOptionIdx, t.tier, wedChallengeText, studentAvailableDays);
     const tPercent = percentFor(tItems, daily[t.id], weekly[t.id]);
     const completedAt = daily[t.id]?.completedAt || null;
     return { ...t, tPercent, completedAt };
@@ -803,13 +789,9 @@ function SupervisorDashboard({ onExit, supervisor }) {
   const [pins, setPins] = useState({});
   const [wedChallengeText, setWedChallengeText] = useState('');
   const [wedDraft, setWedDraft] = useState('');
-  const [customChallengeText, setCustomChallengeText] = useState('');
-  const [customDraft, setCustomDraft] = useState('');
   const [savingChallenge, setSavingChallenge] = useState(false);
-  const [successMsg, setSuccessMsg] = useState(false);
   const [groupFilter, setGroupFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [selectedOptionIdx, setSelectedOptionIdx] = useState(0);
 
   const supervisorAvailableDays = useMemo(() => {
     const list = [];
@@ -832,10 +814,14 @@ function SupervisorDashboard({ onExit, supervisor }) {
     return list;
   }, []);
 
+  const [selectedOptionIdx, setSelectedOptionIdx] = useState(() => {
+    const match = supervisorAvailableDays.find(d => d.realDayIdx === clock.realDayOfWeek);
+    return match ? match.idx : 0;
+  });
+
   const currentDailyKey = `wird-daily_option_${selectedOptionIdx}`;
   const currentWeeklyKey = `wird-weekly_week_1`;
   const currentWedChallengeKey = `wed-challenge_week_${Math.floor(selectedOptionIdx / 7) + 1}`;
-  const currentCustomChallengeKey = `custom-challenge_option_${selectedOptionIdx}`;
 
   useEffect(() => {
     const unsubDaily = onSnapshot(doc(db, 'wird', currentDailyKey), (snap) => {
@@ -858,20 +844,10 @@ function SupervisorDashboard({ onExit, supervisor }) {
       }
     });
 
-    const unsubCustom = onSnapshot(doc(db, 'wird', currentCustomChallengeKey), (snap) => {
-      if (snap.exists() && snap.data().value) {
-        setCustomChallengeText(snap.data().value);
-        setCustomDraft(snap.data().value);
-      } else {
-        setCustomChallengeText('');
-        setCustomDraft('');
-      }
-    });
-
     loadJSON(PINS_KEY).then((data) => setPins(data || {}));
 
-    return () => { unsubDaily(); unsubWeekly(); unsubWed(); unsubCustom(); };
-  }, [currentDailyKey, currentWeeklyKey, currentWedChallengeKey, currentCustomChallengeKey]);
+    return () => { unsubDaily(); unsubWeekly(); unsubWed(); };
+  }, [currentDailyKey, currentWeeklyKey, currentWedChallengeKey]);
 
   const resetPin = async (studentId) => {
     const updated = { ...pins };
@@ -880,35 +856,23 @@ function SupervisorDashboard({ onExit, supervisor }) {
     await saveJSON(PINS_KEY, updated);
   };
 
-  const saveChallenges = async () => {
+  const saveWedChallenge = async () => {
     setSavingChallenge(true);
-    setSuccessMsg(false);
-    const optionObj = supervisorAvailableDays.find(d => d.idx === selectedOptionIdx);
-    const actualDayIdx = optionObj ? optionObj.realDayIdx : 0;
-    
-    if (actualDayIdx === 3) {
-      await saveTextData(currentWedChallengeKey, wedDraft);
-      setWedChallengeText(wedDraft);
-    }
-    
-    await saveTextData(currentCustomChallengeKey, customDraft);
-    setCustomChallengeText(customDraft);
-
+    await saveTextData(currentWedChallengeKey, wedDraft);
+    setWedChallengeText(wedDraft);
     setSavingChallenge(false);
-    setSuccessMsg(true);
-    setTimeout(() => setSuccessMsg(false), 3000);
   };
 
   const rows = useMemo(() => {
     return STUDENTS.map((s) => {
-      const items = getVisibleItems(selectedOptionIdx, s.tier, wedChallengeText, customChallengeText, supervisorAvailableDays);
+      const items = getVisibleItems(selectedOptionIdx, s.tier, wedChallengeText, supervisorAvailableDays);
       const percent = percentFor(items, daily[s.id], weekly[s.id]);
       const hasCumulative = !!weekly[s.id]?.cumulativeReview?.completed;
       return { ...s, percent, hasCumulative, completedAt: daily[s.id]?.completedAt || null };
     });
-  }, [daily, weekly, selectedOptionIdx, wedChallengeText, customChallengeText, supervisorAvailableDays]);
+  }, [daily, weekly, selectedOptionIdx, wedChallengeText, supervisorAvailableDays]);
 
-  const groupAverages = useMemo(() => computeGroupAverages(selectedOptionIdx, wedChallengeText, customChallengeText, daily, weekly, supervisorAvailableDays, STUDENTS), [selectedOptionIdx, wedChallengeText, customChallengeText, daily, weekly, supervisorAvailableDays]);
+  const groupAverages = useMemo(() => computeGroupAverages(selectedOptionIdx, wedChallengeText, daily, weekly, supervisorAvailableDays, STUDENTS), [selectedOptionIdx, wedChallengeText, daily, weekly, supervisorAvailableDays]);
 
   const leaderboard = useMemo(() => {
     return rows
@@ -953,42 +917,26 @@ function SupervisorDashboard({ onExit, supervisor }) {
 
       <GroupRace coralPercent={groupAverages.coral} pearlPercent={groupAverages.pearl} />
 
-      <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe', marginBottom: '16px' }}>
-        <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '13px', margin: '0 0 8px 0' }}>✍️ كتابة التحدي والملاحظات لهذا اليوم</h3>
-        
-        {actualDayIdx === 3 && (
-          <div style={{ marginBottom: '10px' }}>
-            <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#0f766e', display: 'block', marginBottom: '4px' }}>تحدي الأربعاء الثابت:</label>
-            <textarea
-              value={wedDraft}
-              onChange={(e) => setWedDraft(e.target.value)}
-              placeholder="اكتبي تحدي الأربعاء هنا..."
-              rows={2}
-              style={{ width: '100%', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '8px', fontSize: '12px', resize: 'none', boxSizing: 'border-box' }}
-            />
-          </div>
-        )}
-
-        <div>
-          <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#e11d48', display: 'block', marginBottom: '4px' }}>تحدي اليوم الإضافي (يظهر للطالبات كبند إضافي):</label>
+      {/* كتابة تحدي الأربعاء الثابت فقط */}
+      {actualDayIdx === 3 && (
+        <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe', marginBottom: '16px' }}>
+          <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '13px', margin: '0 0 8px 0' }}>✍️ كتابة تحدي الأربعاء</h3>
           <textarea
-            value={customDraft}
-            onChange={(e) => setCustomDraft(e.target.value)}
-            placeholder="اكتبي تحدي إضافي لهذا اليوم إن وجد..."
+            value={wedDraft}
+            onChange={(e) => setWedDraft(e.target.value)}
+            placeholder="اكتبي تحدي الأربعاء هنا..."
             rows={2}
             style={{ width: '100%', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '8px', fontSize: '12px', resize: 'none', boxSizing: 'border-box' }}
           />
+          <button
+            onClick={saveWedChallenge}
+            disabled={savingChallenge}
+            style={{ width: '100%', backgroundColor: '#0f766e', color: '#ffffff', border: 'none', padding: '8px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer' }}
+          >
+            {savingChallenge ? 'جارِ الحفظ...' : 'حفظ تحدي الأربعاء'}
+          </button>
         </div>
-
-        <button
-          onClick={saveChallenges}
-          disabled={savingChallenge}
-          style={{ width: '100%', backgroundColor: '#0f766e', color: '#ffffff', border: 'none', padding: '8px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer' }}
-        >
-          {savingChallenge ? 'جارِ الإرسال...' : 'حفظ وإرسال التحدي للطالبات'}
-        </button>
-        {successMsg && <div style={{ color: '#16a34a', fontSize: '12px', textAlign: 'center', marginTop: '6px', fontWeight: 'bold' }}>تم الإرسال بنجاح ✓</div>}
-      </div>
+      )}
 
       <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe', marginBottom: '16px' }}>
         <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '13px', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1035,7 +983,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
             let medalBadge = null;
             if (isDone) {
               if (rankIndex === 0) medalBadge = '🥇 الأولى';
-              else if (rankIndex === 1) medalBadge = '🥈 الثانية';
+              else if (rankIndex === 1) medalBadge, medalBadge = '🥈 الثانية';
               else if (rankIndex === 2) medalBadge = '🥉 الثالثة';
               else medalBadge = 'منجزة ✓';
             }
@@ -1051,7 +999,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
                   <span style={{ fontSize: '11px', color: '#64748b', width: '28px' }}>{r.percent}%</span>
                   {pins?.[r.id] && (
                     <button onClick={() => resetPin(r.id)} style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer', padding: 0 }}>
-                      <Lock size={12} />
+                      <Lock size/12 />
                     </button>
                   )}
                 </div>
