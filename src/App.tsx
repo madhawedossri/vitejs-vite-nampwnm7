@@ -91,7 +91,6 @@ function useCycleClock() {
   const cycleEnd = new Date(cycleStart);
   cycleEnd.setDate(cycleEnd.getDate() + 1);
 
-  // معرفة اليوم الفعلي الحالي لتحديد المؤشر الافتراضي بدقة
   const realDayOfWeek = cycleStart.getDay(); // 0: الأحد، 1: الاثنين ... 6: السبت
 
   const formattedDate = cycleStart.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' });
@@ -405,7 +404,6 @@ function StudentFlow({ onExit }) {
   const [wedChallengeText, setWedChallengeText] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
 
-  // توليد الأيام بدون يوم الجمعة (استبعاد realDayIdx === 5)
   const availableDays = useMemo(() => {
     const list = [];
     const maxAllowedOptionIdx = 13;
@@ -438,7 +436,6 @@ function StudentFlow({ onExit }) {
     });
   }, [availableDays, student]);
 
-  // تعيين اليوم الافتراضي بناءً على اليوم الحالي الفعلي في الجهاز
   const [selectedOptionIdx, setSelectedOptionIdx] = useState(() => {
     const match = availableDays.find(d => d.realDayIdx === clock.realDayOfWeek);
     return match ? match.idx : 0;
@@ -454,7 +451,6 @@ function StudentFlow({ onExit }) {
     }
   }, []);
 
-  // مفتاح تخزين فريد ومستقل تماماً لكل يوم وكل أسبوع لضمان عدم تداخل الإنجازات
   const currentDailyKey = `wird-daily_option_${selectedOptionIdx}`;
   const currentWeeklyKey = `wird-weekly_week_1`;
   const currentWedChallengeKey = `wed-challenge_week_${Math.floor(selectedOptionIdx / 7) + 1}`;
@@ -917,7 +913,6 @@ function SupervisorDashboard({ onExit, supervisor }) {
 
       <GroupRace coralPercent={groupAverages.coral} pearlPercent={groupAverages.pearl} />
 
-      {/* كتابة تحدي الأربعاء الثابت فقط */}
       {actualDayIdx === 3 && (
         <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe', marginBottom: '16px' }}>
           <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '13px', margin: '0 0 8px 0' }}>✍️ كتابة تحدي الأربعاء</h3>
@@ -983,7 +978,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
             let medalBadge = null;
             if (isDone) {
               if (rankIndex === 0) medalBadge = '🥇 الأولى';
-              else if (rankIndex === 1) medalBadge, medalBadge = '🥈 الثانية';
+              else if (rankIndex === 1) medalBadge = '🥈 الثانية';
               else if (rankIndex === 2) medalBadge = '🥉 الثالثة';
               else medalBadge = 'منجزة ✓';
             }
@@ -999,7 +994,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
                   <span style={{ fontSize: '11px', color: '#64748b', width: '28px' }}>{r.percent}%</span>
                   {pins?.[r.id] && (
                     <button onClick={() => resetPin(r.id)} style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer', padding: 0 }}>
-                      <Lock size/12 />
+                      <Lock size={12} />
                     </button>
                   )}
                 </div>
