@@ -21,60 +21,13 @@ const db = getFirestore(firebaseApp);
    بيانات ثابتة: أسماء الطالبات، المجموعات، والفئات (الدورات)
 --------------------------------------------------------------- */
 const NAMES = [
-  'سارة',
-  'لين',
-  'جنى',
-  'دانة',
-  'رهف',
-  'لمى',
-  'غلا',
-  'وعد',
-  'تالا',
-  'ريم',
-  'جود',
-  'سديم',
-  'لجين',
-  'شهد',
-  'ملك',
-  'رغد',
-  'فرح',
-  'هيا',
-  'نوف',
-  'بشائر',
-  'أصايل',
-  'ريناد',
-  'لارين',
-  'عبير',
-  'مي',
-  'دلال',
-  'وطفاء',
-  'رند',
-  'أسيل',
-  'غيداء',
-  'جواهر',
-  'نجود',
-  'شذى',
-  'أبرار',
-  'رهام',
-  'لوجين',
-  'سلمى',
-  'جنان',
-  'ندى',
-  'هتون',
-  'أماني',
-  'بيان',
-  'تولين',
-  'وجدان',
-  'ريتاج',
-  'ليان',
-  'أريج',
-  'دانية',
-  'فاطمة',
-  'خلود',
-  'مضاوي',
+  'سارة', 'لين', 'جنى', 'دانة', 'رهف', 'لمى', 'غلا', 'وعد', 'تالا', 'ريم',
+  'جود', 'سديم', 'لجين', 'شهد', 'ملك', 'رغد', 'فرح', 'هيا', 'نوف', 'بشائر',
+  'أصايل', 'ريناد', 'لارين', 'عبير', 'مي', 'دلال', 'وطفاء', 'رند', 'أسيل', 'غيداء',
+  'جواهر', 'نجود', 'شذى', 'أبرار', 'رهام', 'لوجين', 'سلمى', 'جنان', 'ندى', 'هتون',
+  'أماني', 'بيان', 'تولين', 'وجدان', 'ريتاج', 'ليان', 'أريج', 'دانية', 'فاطمة', 'خلود', 'مضاوي'
 ];
 
-// tier: 'new' (الدورة الأولى/عادية) | 'second' (الدفعة الثانية - المراجعة الكبرى) | 'third' (الدورة الثالثة - المراجعة التراكمية)
 const FORCED_THIRD_TIER_NAMES = ['مضاوي'];
 const STUDENTS = NAMES.map((name, i) => {
   let tier = 'new';
@@ -117,38 +70,28 @@ const SUPERVISORS = [
   { id: 'batool', name: 'أستاذة البتول', code: '2222' },
 ];
 
-/* ---------------------------------------------------------------
-   الأيام: 0=الأحد 1=الاثنين 2=الثلاثاء 3=الأربعاء 4=الخميس 5=الجمعة 6=السبت
---------------------------------------------------------------- */
 const DAY_NAMES_BY_INDEX = [
-  'الأحد',
-  'الاثنين',
-  'الثلاثاء',
-  'الأربعاء',
-  'الخميس',
-  'الجمعة',
-  'السبت',
+  'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'
 ];
 
-// وقت تسليم البنود: من 4:30 عصراً إلى 4:30 عصراً من اليوم التالي
 const CUTOFF_HOUR = 16;
 const CUTOFF_MIN = 30;
 
 function getWeekKey(d = new Date()) {
   const day = d.getDay();
-  const diff = (day - 6 + 7) % 7; // مسافة الأيام منذ آخر سبت
+  const diff = (day - 6 + 7) % 7;
   const sat = new Date(d);
   sat.setDate(d.getDate() - diff);
   return sat.toISOString().slice(0, 10);
 }
 
-/* "يوم الورد" الفعلي يبدأ الساعة 4:30 عصراً وينتهي الساعة 4:30 عصراً في اليوم التالي */
 function getCycleStart(now) {
   const c = new Date(now);
   c.setHours(CUTOFF_HOUR, CUTOFF_MIN, 0, 0);
   if (now.getTime() < c.getTime()) c.setDate(c.getDate() - 1);
   return c;
 }
+
 function formatDuration(ms) {
   if (ms < 0) ms = 0;
   const totalSec = Math.floor(ms / 1000);
@@ -157,7 +100,7 @@ function formatDuration(ms) {
   const s = String(totalSec % 60).padStart(2, '0');
   return `${h}:${m}:${s}`;
 }
-/* ساعة حية: تحدد يوم الورد الحالي فعلياً حسب الوقت الحقيقي، وتتحدث تلقائياً */
+
 function useCycleClock() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -179,73 +122,27 @@ function useCycleClock() {
   };
 }
 
-/* بنود اليوم الظاهرة حسب اليوم المعروض وفئة الطالبة */
 function getVisibleItems(displayIdx, tier, wedChallengeText) {
   const items = [];
-  const basicDays = [6, 0, 1, 2]; // السبت - الثلاثاء
+  const basicDays = [6, 0, 1, 2];
   if (basicDays.includes(displayIdx)) {
-    items.push({
-      id: 'listen',
-      label: 'سماع المقرر',
-      desc: 'سماع النصاب 3 مرات من الشيخ.',
-      emoji: '🎧',
-      weekly: false,
-    });
-    items.push({
-      id: 'recite',
-      label: 'السرد مع رفيقة',
-      desc: 'سرده مرتين بدون خطأ أو تنبيه أو لحن.',
-      emoji: '🪸',
-      weekly: false,
-    });
-    items.push({
-      id: 'repeat',
-      label: 'التكرار الذاتي',
-      desc: 'التكرار 7 مرات (تسجيل صوتي أو بالورقة).',
-      emoji: '🫧',
-      weekly: false,
-    });
-    items.push({
-      id: 'tafsir',
-      label: 'التفسير',
-      desc: 'قراءة تفسير النصاب.',
-      emoji: '📖',
-      weekly: false,
-    });
-    items.push({
-      id: 'review',
-      label: 'مراجعة السابق',
-      desc: 'مراجعة الورد السابق',
-      emoji: '🐬',
-      weekly: false,
-    });
+    items.push({ id: 'listen', label: 'سماع المقرر', desc: 'سماع النصاب 3 مرات من الشيخ.', emoji: '🎧', weekly: false });
+    items.push({ id: 'recite', label: 'السرد مع رفيقة', desc: 'سرده مرتين بدون خطأ أو تنبيه أو لحن.', emoji: '🪸', weekly: false });
+    items.push({ id: 'repeat', label: 'التكرار الذاتي', desc: 'التكرار 7 مرات (تسجيل صوتي أو بالورقة).', emoji: '🫧', weekly: false });
+    items.push({ id: 'tafsir', label: 'التفسير', desc: 'قراءة تفسير النصاب.', emoji: '📖', weekly: false });
+    items.push({ id: 'review', label: 'مراجعة السابق', desc: 'مراجعة الورد السابق', emoji: '🐬', weekly: false });
   }
   if (tier === 'second' && [6, 0, 1, 2, 3].includes(displayIdx)) {
-    items.push({
-      id: 'majorReview',
-      label: 'المراجعة الكبرى',
-      desc: 'خاص بطالبات الدفعة الثانية',
-      emoji: '⭐️',
-      weekly: false,
-    });
+    items.push({ id: 'majorReview', label: 'المراجعة الكبرى', desc: 'خاص بطالبات الدفعة الثانية', emoji: '⭐️', weekly: false });
   }
   if (tier === 'third' && [6, 0, 1, 2, 3, 4].includes(displayIdx)) {
-    items.push({
-      id: 'cumulativeReview',
-      label: 'المراجعة التراكمية',
-      desc: 'خاص بطالبات الدورة الثالثة — تُنجز مرة واحدة في الأسبوع',
-      emoji: '⛓️✨',
-      weekly: true,
-    });
+    items.push({ id: 'cumulativeReview', label: 'المراجعة التراكمية', desc: 'خاص بطالبات الدورة الثالثة — تُنجز مرة واحدة في الأسبوع', emoji: '⛓️✨', weekly: true });
   }
   if (displayIdx === 3) {
     items.push({
       id: 'wedChallenge',
       label: 'تحدي الأربعاء',
-      desc:
-        wedChallengeText && wedChallengeText.trim()
-          ? wedChallengeText
-          : 'بانتظار المشرفة لكتابة تحدي هذا الأسبوع...',
+      desc: wedChallengeText && wedChallengeText.trim() ? wedChallengeText : 'بانتظار المشرفة لكتابة تحدي هذا الأسبوع...',
       emoji: '🦪',
       weekly: false,
     });
@@ -257,14 +154,13 @@ function isItemDone(item, dailySaved, weeklySaved) {
   if (item.weekly) return !!weeklySaved?.[item.id]?.completed;
   return !!dailySaved?.items?.[item.id];
 }
+
 function percentFor(items, dailySaved, weeklySaved) {
   if (items.length === 0) return 0;
-  const done = items.filter((it) =>
-    isItemDone(it, dailySaved, weeklySaved)
-  ).length;
+  const done = items.filter((it) => isItemDone(it, dailySaved, weeklySaved)).length;
   return Math.round((done / items.length) * 100);
 }
-/* متوسط إنجاز كل مجموعة (للسباق التنافسي) */
+
 function computeGroupAverages(dayIndex, challengeText, daily, weekly) {
   const sums = { coral: [], pearl: [] };
   STUDENTS.forEach((s) => {
@@ -272,15 +168,11 @@ function computeGroupAverages(dayIndex, challengeText, daily, weekly) {
     const percent = percentFor(items, daily?.[s.id], weekly?.[s.id]);
     sums[s.group].push(percent);
   });
-  const avg = (arr) =>
-    arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
+  const avg = (arr) => (arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0);
   return { coral: avg(sums.coral), pearl: avg(sums.pearl) };
 }
 
-/* ---------------------------------------------------------------
-   تخزين مشترك — الحين يتحفظ بشكل دائم في Firestore
---------------------------------------------------------------- */
-const PINS_KEY = `student-pins-v1`; // لا يتغيّر يومياً - رموز الطالبات ثابتة
+const PINS_KEY = `student-pins-v1`;
 
 async function loadJSON(key) {
   try {
@@ -292,6 +184,7 @@ async function loadJSON(key) {
     return {};
   }
 }
+
 async function saveJSON(key, data) {
   try {
     await setDoc(doc(db, 'wird', key), { value: JSON.stringify(data) });
@@ -300,6 +193,7 @@ async function saveJSON(key, data) {
     return false;
   }
 }
+
 async function loadChallengeText(key) {
   try {
     const snap = await getDoc(doc(db, 'wird', key));
@@ -308,6 +202,7 @@ async function loadChallengeText(key) {
     return '';
   }
 }
+
 async function saveChallengeText(key, text) {
   try {
     await setDoc(doc(db, 'wird', key), { value: text });
@@ -317,9 +212,6 @@ async function saveChallengeText(key, text) {
   }
 }
 
-/* ---------------------------------------------------------------
-   عنصر: صف من اللآلئ يعبّر عن نسبة الإنجاز
---------------------------------------------------------------- */
 function PearlBar({ percent, count = 10, big = false }) {
   const filled = Math.round((percent / 100) * count);
   return (
@@ -340,42 +232,20 @@ function PearlBar({ percent, count = 10, big = false }) {
   );
 }
 
-/* ---------------------------------------------------------------
-   سباق اللآلئ: تفاعلي وممتع بدلاً من الأشرطة التقليدية
---------------------------------------------------------------- */
 function RaceLane({ emoji, percent, trackTint, burst }) {
   const clamped = Math.max(0, Math.min(100, percent));
   return (
-    <div
-      dir="ltr"
-      className={
-        'relative h-16 rounded-full overflow-hidden border border-sky-100 ' +
-        trackTint
-      }
-    >
+    <div dir="ltr" className={'relative h-14 rounded-full overflow-hidden border border-sky-100 ' + trackTint}>
       <div className="absolute inset-0 flex items-center justify-between px-4 text-sky-300 select-none">
         <span className="text-base opacity-70">🚩</span>
         <span className="text-xl">🏆</span>
       </div>
-      <div
-        className="absolute inset-y-0 flex items-center transition-all duration-700 ease-out"
-        style={{ left: `calc(${clamped}% * 0.78 + 4%)` }}
-      >
+      <div className="absolute inset-y-0 flex items-center transition-all duration-700 ease-out" style={{ left: `calc(${clamped}% * 0.78 + 4%)` }}>
         <div className="relative">
-          {burst && (
-            <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-lg splash-pop">
-              💦
-            </span>
-          )}
-          <span className="text-3xl inline-block swim-wiggle drop-shadow">
-            {emoji}
-          </span>
-          <span className="absolute -bottom-1 -left-3 text-[10px] bubble-a">
-            🫧
-          </span>
-          <span className="absolute -bottom-2 -left-5 text-[9px] bubble-b">
-            🫧
-          </span>
+          {burst && <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-lg splash-pop">💦</span>}
+          <span className="text-2xl inline-block swim-wiggle drop-shadow">{emoji}</span>
+          <span className="absolute -bottom-1 -left-3 text-[10px] bubble-a">🫧</span>
+          <span className="absolute -bottom-2 -left-5 text-[9px] bubble-b">🫧</span>
         </div>
       </div>
     </div>
@@ -390,52 +260,37 @@ function GroupRace({ coralPercent, pearlPercent, coralBurst, pearlBurst }) {
   } else if (diff === 0) {
     banner = '🌊 تعادل مثير بين الفريقين! السباق مشتعل 🔥';
   } else if (diff > 0) {
-    banner = `🪸 المرجان تتقدّم بفارق ${diff}%! هيا يا لؤلؤ لا تسلمن الصدارة 🏊‍♀️`;
+    banner = `🪸 المرجان تتقدّم بفارق ${diff}%! هيا يا لؤلؤ 🏊‍♀️`;
   } else {
-    banner = `🦪 اللؤلؤ تتقدّم بفارق ${Math.abs(
-      diff
-    )}%! هيا يا مرجان لحقوهنّ 🏊‍♀️`;
+    banner = `🦪 اللؤلؤ تتقدّم بفارق ${Math.abs(diff)}%! هيا يا مرجان 🏊‍♀️`;
   }
   return (
-    <div className="bg-white/90 rounded-3xl border border-sky-100 p-5 shadow-sm">
+    <div className="bg-white/90 rounded-2xl border border-sky-100 p-4 shadow-sm">
       <div className="flex items-center gap-2 mb-1">
-        <span className="text-xl">🏊‍♀️</span>
-        <h3 className="font-extrabold text-slate-700">
-          سباق اللآلئ بين الفريقين
-        </h3>
+        <span className="text-lg">🏊‍♀️</span>
+        <h3 className="font-extrabold text-slate-700 text-sm">سباق اللآلئ بين الفريقين</h3>
       </div>
-      <p className="text-xs text-slate-400 mb-4">{banner}</p>
-      <div className="space-y-3">
+      <p className="text-[11px] text-slate-400 mb-3">{banner}</p>
+      <div className="space-y-2.5">
         <div>
           <div className="flex items-center justify-between mb-1 text-xs font-bold text-rose-600">
             <span>🪸 المرجان</span>
             <span>{coralPercent}%</span>
           </div>
-          <RaceLane
-            emoji="🐠"
-            percent={coralPercent}
-            trackTint="bg-rose-50/60"
-            burst={coralBurst}
-          />
+          <RaceLane emoji="🐠" percent={coralPercent} trackTint="bg-rose-50/60" burst={coralBurst} />
         </div>
         <div>
           <div className="flex items-center justify-between mb-1 text-xs font-bold text-teal-700">
             <span>🦪 اللؤلؤ</span>
             <span>{pearlPercent}%</span>
           </div>
-          <RaceLane
-            emoji="🐬"
-            percent={pearlPercent}
-            trackTint="bg-teal-50/60"
-            burst={pearlBurst}
-          />
+          <RaceLane emoji="🐬" percent={pearlPercent} trackTint="bg-teal-50/60" burst={pearlBurst} />
         </div>
       </div>
     </div>
   );
 }
 
-/* هوك مساعد: يحسب متوسط المجموعتين، ويكتشف أي مجموعة تقدمت لتفعيل تأثير الرشّة */
 function useGroupRace(dayIndex, challengeText, daily, weekly) {
   const [averages, setAverages] = useState({ coral: 0, pearl: 0 });
   const [burst, setBurst] = useState({ coral: false, pearl: false });
@@ -446,10 +301,7 @@ function useGroupRace(dayIndex, challengeText, daily, weekly) {
     const avg = computeGroupAverages(dayIndex, challengeText, daily, weekly);
     setAverages(avg);
     const prev = prevRef.current;
-    const rose = {
-      coral: avg.coral > prev.coral,
-      pearl: avg.pearl > prev.pearl,
-    };
+    const rose = { coral: avg.coral > prev.coral, pearl: avg.pearl > prev.pearl };
     prevRef.current = avg;
     if (rose.coral || rose.pearl) {
       setBurst(rose);
@@ -464,51 +316,19 @@ function useGroupRace(dayIndex, challengeText, daily, weekly) {
 function CelebrationModal({ onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-teal-950/60 backdrop-blur-sm p-4">
-      <div className="relative bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 text-center overflow-hidden pop-in">
-        <button
-          onClick={onClose}
-          className="absolute top-3 left-3 text-sky-400 hover:text-sky-600"
-        >
+      <div className="relative bg-white rounded-3xl shadow-2xl max-w-xs w-full p-6 text-center overflow-hidden pop-in">
+        <button onClick={onClose} className="absolute top-3 left-3 text-sky-400 hover:text-sky-600">
           <X size={20} />
         </button>
-        <div className="relative h-28 flex items-center justify-center">
-          <span
-            className="absolute text-lg sparkle"
-            style={{ left: '20%', top: '10%', animationDelay: '0.2s' }}
-          >
-            ✨
-          </span>
-          <span
-            className="absolute text-lg sparkle"
-            style={{ right: '18%', top: '5%', animationDelay: '0.5s' }}
-          >
-            ✨
-          </span>
-          <span
-            className="absolute text-sm sparkle"
-            style={{ right: '30%', bottom: '5%', animationDelay: '0.8s' }}
-          >
-            🫧
-          </span>
-          <span
-            className="absolute text-sm sparkle"
-            style={{ left: '28%', bottom: '0%', animationDelay: '0.35s' }}
-          >
-            🫧
-          </span>
-          <span className="text-6xl float-wave">🦪</span>
+        <div className="relative h-24 flex items-center justify-center">
+          <span className="absolute text-lg sparkle" style={{ left: '20%', top: '10%', animationDelay: '0.2s' }}>✨</span>
+          <span className="absolute text-lg sparkle" style={{ right: '18%', top: '5%', animationDelay: '0.5s' }}>✨</span>
+          <span className="text-5xl float-wave">🦪</span>
         </div>
-        <h3 className="text-2xl font-extrabold text-teal-700 mt-2">
-          أحسنتِ يا لؤلؤة الحلقة! 🌟
-        </h3>
-        <p className="text-slate-500 mt-2">أتممتِ وردكِ اليوم بنجاح</p>
-        <p className="text-amber-600 font-bold mt-2">
-          لا تنسين إرسال البطاقة🍯
-        </p>
-        <button
-          onClick={onClose}
-          className="mt-6 w-full bg-gradient-to-l from-teal-500 to-cyan-500 text-white font-bold py-3 rounded-2xl shadow-md hover:opacity-90 transition"
-        >
+        <h3 className="text-xl font-extrabold text-teal-700 mt-1">أحسنتِ يا لؤلؤة الحلقة! 🌟</h3>
+        <p className="text-xs text-slate-500 mt-1">أتممتِ وردكِ اليوم بنجاح</p>
+        <p className="text-amber-600 font-bold text-xs mt-2">لا تنسين إرسال البطاقة 🍯</p>
+        <button onClick={onClose} className="mt-5 w-full bg-gradient-to-l from-teal-500 to-cyan-500 text-white font-bold py-2.5 rounded-xl shadow-md hover:opacity-90 transition text-sm">
           الحمد لله 💙
         </button>
       </div>
@@ -516,90 +336,66 @@ function CelebrationModal({ onClose }) {
   );
 }
 
-/* ---------------------------------------------------------------
-   شريط علوي مشترك + عداد وقت التسليم
---------------------------------------------------------------- */
 function TopBar({ onExit, title, subtitle, countdownMs }) {
   return (
-    <div className="max-w-2xl mx-auto px-4 pt-5">
+    <div className="px-4 pt-4">
       <div className="flex items-center justify-between">
-        <button
-          onClick={onExit}
-          className="flex items-center gap-1 text-slate-400 hover:text-teal-600 text-sm"
-        >
-          <ArrowRight size={16} />
-          رجوع
+        <button onClick={onExit} className="flex items-center gap-1 text-slate-400 hover:text-teal-600 text-xs font-bold">
+          <ArrowRight size={15} /> رجوع
         </button>
         <div className="text-center">
-          <div className="font-extrabold text-teal-700">{title}</div>
+          <div className="font-extrabold text-teal-700 text-base">{title}</div>
           {subtitle && <div className="text-xs text-slate-400">{subtitle}</div>}
-          <div className="text-[10px] text-sky-300 mt-0.5">
-            🗓 {COURSE_DATES.start} - {COURSE_DATES.end}
-          </div>
         </div>
-        <div className="w-14" />
+        <div className="w-12" />
       </div>
       {typeof countdownMs === 'number' && (
-        <div className="flex items-center justify-center gap-1.5 mt-3 text-[11px] text-amber-600 bg-amber-50 border border-amber-100 rounded-full py-1.5 px-3 w-fit mx-auto">
-          <span>⏳ الوقت المتبقي لتسليم ورد اليوم:</span>
-          <span className="font-bold tabular-nums" dir="ltr">
-            {formatDuration(countdownMs)}
-          </span>
+        <div className="flex items-center justify-center gap-1.5 mt-2.5 text-[10px] text-amber-600 bg-amber-50 border border-amber-100 rounded-full py-1 px-3 w-fit mx-auto">
+          <span>⏳ الوقت المتبقي لورد اليوم:</span>
+          <span className="font-bold tabular-nums" dir="ltr">{formatDuration(countdownMs)}</span>
         </div>
       )}
     </div>
   );
 }
 
-/* ---------------------------------------------------------------
-   شاشة اختيار الدور
---------------------------------------------------------------- */
 function RoleSelect({ onSelect }) {
   return (
-    <div className="min-h-screen ocean-bg flex flex-col items-center justify-center p-6">
-      <div className="text-center">
-        <div className="text-4xl mb-1">🦪🌊🪸</div>
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-teal-700">
-          ارتقاء - غراس اللؤلؤ
-        </h1>
-        <p className="text-slate-500 mt-2 max-w-md mx-auto">
-          من التلقين إلى الإتقان.. نرتقي بالحفظ معاً خطوة بخطوة 🌊✨
-        </p>
-        <div className="flex items-center justify-center gap-4 mt-3 text-xs text-teal-600 font-bold">
-          <span>🗓 البداية: {COURSE_DATES.start}</span>
-          <span className="text-sky-300">|</span>
-          <span>🗓 النهاية: {COURSE_DATES.end}</span>
-        </div>
+    <div className="min-h-[580px] flex flex-col items-center justify-center p-4 text-center">
+      <div className="text-4xl mb-1">🦪🌊🪸</div>
+      <h1 className="text-2xl font-extrabold text-teal-700">ارتقاء - غراس اللؤلؤ</h1>
+      <p className="text-xs text-slate-500 mt-1.5 leading-relaxed max-w-xs">
+        من التلقين إلى الإتقان.. نرتقي بالحفظ معاً خطوة بخطوة 🌊✨
+      </p>
+      <div className="flex items-center justify-center gap-3 mt-2 text-[11px] text-teal-600 font-bold bg-teal-50/80 px-3 py-1 rounded-full">
+        <span>🗓 البداية: {COURSE_DATES.start}</span>
+        <span className="text-sky-300">|</span>
+        <span>النهائي: {COURSE_DATES.end}</span>
       </div>
-      <div className="grid sm:grid-cols-2 gap-5 max-w-xl w-full mt-8">
+
+      <div className="grid grid-cols-1 gap-3.5 w-full mt-6 px-2">
         <button
           onClick={() => onSelect('student')}
-          className="bg-white/90 rounded-3xl shadow-lg border border-sky-100 p-7 text-center hover:-translate-y-1 hover:shadow-xl transition-all"
+          className="bg-white rounded-2xl shadow-sm border border-sky-100 p-5 text-center hover:shadow-md transition-all active:scale-[0.98]"
         >
-          <div className="text-5xl mb-3">🦪</div>
-          <div className="font-extrabold text-teal-700 text-lg">
-            دخول الطالبة
-          </div>
-          <div className="text-slate-400 text-sm mt-1">تابعي ورَدكِ اليومي</div>
+          <div className="text-4xl mb-1">🦪</div>
+          <div className="font-extrabold text-teal-700 text-base">دخول الطالبة</div>
+          <div className="text-slate-400 text-xs mt-0.5">تابعي ورَدكِ اليومي</div>
         </button>
+
         <button
           onClick={() => onSelect('supervisor')}
-          className="bg-white/90 rounded-3xl shadow-lg border border-sky-100 p-7 text-center hover:-translate-y-1 hover:shadow-xl transition-all"
+          className="bg-white rounded-2xl shadow-sm border border-sky-100 p-5 text-center hover:shadow-md transition-all active:scale-[0.98]"
         >
-          <div className="text-5xl mb-3">🪸</div>
-          <div className="font-extrabold text-rose-600 text-lg">المشرفات</div>
-          <div className="text-slate-400 text-sm mt-1">
-            لوحة تحكم خاصة بالمشرفات
-          </div>
+          <div className="text-4xl mb-1">🪸</div>
+          <div className="font-extrabold text-rose-600 text-base">المشرفات</div>
+          <div className="text-slate-400 text-xs mt-0.5">لوحة تحكم خاصة بالمشرفات</div>
         </button>
       </div>
     </div>
   );
 }
 
-/* ---------------------------------------------------------------
-   مسار الطالبة
---------------------------------------------------------------- */
 function StudentFlow({ onExit }) {
   const clock = useCycleClock();
   const [pins, setPins] = useState(null);
@@ -626,7 +422,6 @@ function StudentFlow({ onExit }) {
     ]);
   }, [clock.dailyKey, clock.weeklyKey, clock.challengeKey]);
 
-  // تحميل عند الدخول أو عند تغيّر يوم الورد (تلقائياً عند الساعة 4:30 عصراً)
   useEffect(() => {
     if (!student) return;
     setLoading(true);
@@ -638,7 +433,6 @@ function StudentFlow({ onExit }) {
     });
   }, [student, fetchData]);
 
-  // تحديث دوري لإظهار تقدّم الزميلات لحظياً (سباق حي)
   useEffect(() => {
     if (!student) return;
     const iv = setInterval(() => {
@@ -681,31 +475,18 @@ function StudentFlow({ onExit }) {
     }
   };
 
-  const items = student
-    ? getVisibleItems(clock.dayIndex, student.tier, challengeText)
-    : [];
+  const items = student ? getVisibleItems(clock.dayIndex, student.tier, challengeText) : [];
   const myDaily = student ? daily?.[student.id] : null;
   const myWeekly = student ? weekly?.[student.id] : null;
-  const percent = useMemo(
-    () => percentFor(items, myDaily, myWeekly),
-    [items, myDaily, myWeekly]
-  );
-  const { averages: groupAverages, burst: groupBurst } = useGroupRace(
-    clock.dayIndex,
-    challengeText,
-    daily,
-    weekly
-  );
+  const percent = useMemo(() => percentFor(items, myDaily, myWeekly), [items, myDaily, myWeekly]);
+  const { averages: groupAverages, burst: groupBurst } = useGroupRace(clock.dayIndex, challengeText, daily, weekly);
 
   const toggleItem = useCallback(
     async (item) => {
       if (!student || !daily || !weekly) return;
       if (item.weekly) {
         const currentEntry = weekly[student.id] || {};
-        const currentItem = currentEntry[item.id] || {
-          completed: false,
-          completedAt: null,
-        };
+        const currentItem = currentEntry[item.id] || { completed: false, completedAt: null };
         const nowCompleted = !currentItem.completed;
         const updatedEntry = {
           ...currentEntry,
@@ -717,26 +498,17 @@ function StudentFlow({ onExit }) {
         const updatedWeekly = { ...weekly, [student.id]: updatedEntry };
         setWeekly(updatedWeekly);
         await saveJSON(clock.weeklyKey, updatedWeekly);
-        const newPercent = percentFor(
-          items,
-          myDaily,
-          updatedWeekly[student.id]
-        );
+        const newPercent = percentFor(items, myDaily, updatedWeekly[student.id]);
         if (newPercent === 100) setShowCelebration(true);
       } else {
         const current = daily[student.id] || { items: {}, completedAt: null };
-        const newItems = {
-          ...current.items,
-          [item.id]: !current.items[item.id],
-        };
+        const newItems = { ...current.items, [item.id]: !current.items[item.id] };
         const newPercent = percentFor(items, { items: newItems }, myWeekly);
         const wasComplete = current.completedAt != null;
         const nowComplete = newPercent === 100;
         const updatedEntry = {
           items: newItems,
-          completedAt: nowComplete
-            ? current.completedAt || new Date().toISOString()
-            : null,
+          completedAt: nowComplete ? current.completedAt || new Date().toISOString() : null,
         };
         const updatedDaily = { ...daily, [student.id]: updatedEntry };
         setDaily(updatedDaily);
@@ -744,33 +516,22 @@ function StudentFlow({ onExit }) {
         if (nowComplete && !wasComplete) setShowCelebration(true);
       }
     },
-    [
-      student,
-      daily,
-      weekly,
-      items,
-      myDaily,
-      myWeekly,
-      clock.dailyKey,
-      clock.weeklyKey,
-    ]
+    [student, daily, weekly, items, myDaily, myWeekly, clock.dailyKey, clock.weeklyKey]
   );
 
   if (!student) {
     if (pendingStudent) {
       if (pins === null) {
         return (
-          <div className="min-h-screen ocean-bg flex items-center justify-center">
-            <div className="text-teal-600 font-bold text-lg animate-pulse">
-              🌊 لحظات...
-            </div>
+          <div className="p-8 text-center text-teal-600 font-bold text-sm animate-pulse">
+            🌊 لحظات...
           </div>
         );
       }
       const hasPin = !!pins[pendingStudent.id];
       return (
-        <div className="min-h-screen ocean-bg flex items-center justify-center p-6">
-          <div className="bg-white/90 rounded-3xl shadow-lg border border-sky-100 p-8 max-w-sm w-full text-center">
+        <div className="p-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-sky-100 p-6 text-center">
             <button
               onClick={() => {
                 setPendingStudent(null);
@@ -778,67 +539,52 @@ function StudentFlow({ onExit }) {
                 setPinConfirm('');
                 setPinError('');
               }}
-              className="flex items-center gap-1 text-slate-400 hover:text-teal-600 text-sm mb-4"
+              className="flex items-center gap-1 text-slate-400 hover:text-teal-600 text-xs mb-3"
             >
-              <ArrowRight size={16} /> رجوع
+              <ArrowRight size={14} /> رجوع
             </button>
-            <div className="text-4xl mb-2">🔒🦪</div>
-            <h2 className="font-extrabold text-teal-700 text-lg">
-              {pendingStudent.name}
-            </h2>
+            <div className="text-3xl mb-1">🔒🦪</div>
+            <h2 className="font-extrabold text-teal-700 text-base">{pendingStudent.name}</h2>
             {hasPin ? (
               <>
-                <p className="text-slate-400 text-sm mt-1">
-                  أدخلي رمزكِ السري (4 أرقام)
-                </p>
+                <p className="text-slate-400 text-xs mt-1">أدخلي رمزكِ السري (4 أرقام)</p>
                 <input
                   type="password"
                   inputMode="numeric"
                   maxLength={4}
                   value={pinInput}
-                  onChange={(e) =>
-                    setPinInput(e.target.value.replace(/\D/g, ''))
-                  }
+                  onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
                   placeholder="••••"
-                  className="mt-4 w-full text-center tracking-[0.5em] border border-sky-200 rounded-xl py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-300"
+                  className="mt-3 w-full text-center tracking-[0.5em] border border-sky-200 rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-teal-300 text-lg"
                 />
               </>
             ) : (
               <>
-                <p className="text-slate-400 text-sm mt-1">
-                  أول مرة؟ أنشئي رمزكِ السري الخاص (4 أرقام) حتى لا تفتح غيركِ
-                  ورَدكِ
-                </p>
+                <p className="text-slate-400 text-xs mt-1">أنشئي رمزكِ السري الخاص (4 أرقام)</p>
                 <input
                   type="password"
                   inputMode="numeric"
                   maxLength={4}
                   value={pinInput}
-                  onChange={(e) =>
-                    setPinInput(e.target.value.replace(/\D/g, ''))
-                  }
-                  placeholder="اختاري رمزاً من 4 أرقام"
-                  className="mt-4 w-full text-center tracking-[0.5em] border border-sky-200 rounded-xl py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-300"
+                  onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                  placeholder="رمز 4 أرقام"
+                  className="mt-3 w-full text-center tracking-[0.3em] border border-sky-200 rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-teal-300 text-sm"
                 />
                 <input
                   type="password"
                   inputMode="numeric"
                   maxLength={4}
                   value={pinConfirm}
-                  onChange={(e) =>
-                    setPinConfirm(e.target.value.replace(/\D/g, ''))
-                  }
-                  placeholder="أعيدي كتابة الرمز"
-                  className="mt-3 w-full text-center tracking-[0.5em] border border-sky-200 rounded-xl py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-300"
+                  onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, ''))}
+                  placeholder="تأكيد الرمز"
+                  className="mt-2 w-full text-center tracking-[0.3em] border border-sky-200 rounded-xl py-2 focus:outline-none focus:ring-2 focus:ring-teal-300 text-sm"
                 />
               </>
             )}
-            {pinError && (
-              <div className="text-rose-500 text-xs mt-2">{pinError}</div>
-            )}
+            {pinError && <div className="text-rose-500 text-xs mt-2">{pinError}</div>}
             <button
               onClick={submitPin}
-              className="mt-4 w-full bg-gradient-to-l from-teal-500 to-cyan-500 text-white font-bold py-2.5 rounded-xl shadow-md hover:opacity-90"
+              className="mt-4 w-full bg-gradient-to-l from-teal-500 to-cyan-500 text-white font-bold py-2.5 rounded-xl shadow hover:opacity-90 text-sm"
             >
               {hasPin ? 'دخول' : 'حفظ ودخول'}
             </button>
@@ -847,10 +593,10 @@ function StudentFlow({ onExit }) {
       );
     }
     return (
-      <div className="min-h-screen ocean-bg p-6">
+      <div className="pb-6">
         <TopBar onExit={onExit} title="اختاري اسمكِ" />
-        <div className="max-w-2xl mx-auto mt-6">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="p-4 mt-1">
+          <div className="grid grid-cols-2 gap-2.5 max-h-[460px] overflow-y-auto pl-1">
             {STUDENTS.map((s) => {
               const badge = TIER_BADGE[s.tier];
               return (
@@ -863,18 +609,14 @@ function StudentFlow({ onExit }) {
                     setPinError('');
                   }}
                   className={
-                    'bg-white/90 rounded-2xl border p-4 text-center shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all ' +
-                    (s.group === 'coral'
-                      ? 'border-rose-100'
-                      : 'border-teal-100')
+                    'bg-white rounded-2xl border p-3 text-center shadow-xs hover:shadow-sm transition-all active:scale-[0.98] ' +
+                    (s.group === 'coral' ? 'border-rose-100' : 'border-teal-100')
                   }
                 >
-                  <div className="text-2xl">{GROUPS[s.group].emoji}</div>
-                  <div className="font-bold text-slate-700 mt-1 text-sm">
-                    {s.name}
-                  </div>
+                  <div className="text-xl">{GROUPS[s.group].emoji}</div>
+                  <div className="font-bold text-slate-700 mt-0.5 text-xs">{s.name}</div>
                   {badge && (
-                    <div className="text-[10px] text-amber-500 mt-1">
+                    <div className="text-[9px] text-amber-500 mt-0.5 font-medium">
                       {badge.emoji} {badge.label}
                     </div>
                   )}
@@ -889,10 +631,8 @@ function StudentFlow({ onExit }) {
 
   if (loading || !daily || !weekly) {
     return (
-      <div className="min-h-screen ocean-bg flex items-center justify-center">
-        <div className="text-teal-600 font-bold text-lg animate-pulse">
-          🌊 جارِ الغوص لإحضار وردكِ...
-        </div>
+      <div className="p-8 text-center text-teal-600 font-bold text-sm animate-pulse">
+        🌊 جارِ الغوص لإحضار وردكِ...
       </div>
     );
   }
@@ -901,10 +641,8 @@ function StudentFlow({ onExit }) {
   const g = GROUPS[student.group];
 
   return (
-    <div className="min-h-screen ocean-bg pb-16">
-      {showCelebration && (
-        <CelebrationModal onClose={() => setShowCelebration(false)} />
-      )}
+    <div className="pb-8">
+      {showCelebration && <CelebrationModal onClose={() => setShowCelebration(false)} />}
       <TopBar
         onExit={() => {
           setStudent(null);
@@ -915,30 +653,28 @@ function StudentFlow({ onExit }) {
         countdownMs={clock.msRemaining}
       />
 
-      <div className="max-w-2xl mx-auto px-4 mt-5">
-        <div className="bg-white/90 rounded-3xl shadow-md border border-sky-100 p-5">
+      <div className="px-4 mt-3 space-y-3.5">
+        <div className="bg-white rounded-2xl shadow-xs border border-sky-100 p-4">
           <div className="flex items-center justify-between">
-            <span className="font-extrabold text-teal-700">وردكِ اليوم</span>
-            <span className="text-sm text-slate-400">{percent}%</span>
+            <span className="font-extrabold text-teal-700 text-sm">وردكِ اليوم</span>
+            <span className="text-xs text-slate-400 font-bold">{percent}%</span>
           </div>
-          <div className="mt-3">
+          <div className="mt-2">
             <PearlBar percent={percent} big />
           </div>
         </div>
 
-        <div className="mt-5">
-          <GroupRace
-            coralPercent={groupAverages.coral}
-            pearlPercent={groupAverages.pearl}
-            coralBurst={groupBurst.coral}
-            pearlBurst={groupBurst.pearl}
-          />
-        </div>
+        <GroupRace
+          coralPercent={groupAverages.coral}
+          pearlPercent={groupAverages.pearl}
+          coralBurst={groupBurst.coral}
+          pearlBurst={groupBurst.pearl}
+        />
 
-        <div className="mt-5 space-y-3">
+        <div className="space-y-2">
           {items.length === 0 ? (
-            <div className="bg-white/80 rounded-3xl border border-sky-100 p-8 text-center text-slate-400">
-              <div className="text-4xl mb-2">🐚</div>
+            <div className="bg-white rounded-2xl border border-sky-100 p-6 text-center text-slate-400 text-xs">
+              <div className="text-3xl mb-1">🐚</div>
               اليوم يوم راحة.. الأصداف نائمة تحت الرمال 💤
             </div>
           ) : (
@@ -949,41 +685,18 @@ function StudentFlow({ onExit }) {
                   key={it.id}
                   onClick={() => toggleItem(it)}
                   className={
-                    'w-full text-right flex items-start gap-3 rounded-2xl border p-4 transition-all shadow-sm ' +
-                    (done
-                      ? 'bg-lime-50 border-lime-300'
-                      : 'bg-white/90 border-sky-100 hover:border-teal-200')
+                    'w-full text-right flex items-start gap-2.5 rounded-xl border p-3 transition-all shadow-2xs ' +
+                    (done ? 'bg-lime-50/90 border-lime-300' : 'bg-white border-sky-100 hover:border-teal-200')
                   }
                 >
-                  <span className="text-2xl">{it.emoji}</span>
+                  <span className="text-xl mt-0.5">{it.emoji}</span>
                   <span className="flex-1">
-                    <span
-                      className={
-                        'block font-bold ' +
-                        (done
-                          ? 'text-emerald-700 line-through decoration-emerald-400'
-                          : 'text-slate-700')
-                      }
-                    >
-                      {it.label}{' '}
-                      {it.weekly && (
-                        <span className="text-[10px] text-amber-500 font-normal">
-                          (أسبوعي)
-                        </span>
-                      )}
+                    <span className={'block font-bold text-xs ' + (done ? 'text-emerald-700 line-through' : 'text-slate-700')}>
+                      {it.label} {it.weekly && <span className="text-[9px] text-amber-500 font-normal">(أسبوعي)</span>}
                     </span>
-                    <span className="block text-xs text-slate-400 mt-0.5">
-                      {it.desc}
-                    </span>
+                    <span className="block text-[11px] text-slate-400 mt-0.5 leading-snug">{it.desc}</span>
                   </span>
-                  <span
-                    className={
-                      'shrink-0 w-6 h-6 rounded-full ring-2 flex items-center justify-center text-white text-xs mt-1 ' +
-                      (done
-                        ? 'bg-emerald-400 ring-emerald-400'
-                        : 'ring-sky-300')
-                    }
-                  >
+                  <span className={'shrink-0 w-5 h-5 rounded-full ring-2 flex items-center justify-center text-white text-[10px] mt-0.5 ' + (done ? 'bg-emerald-400 ring-emerald-400' : 'ring-sky-200')}>
                     {done ? '✓' : ''}
                   </span>
                 </button>
@@ -992,40 +705,21 @@ function StudentFlow({ onExit }) {
           )}
         </div>
 
-        <div className="mt-8">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-xl">{g.emoji}</span>
-            <h3 className={'font-extrabold ' + g.text}>
-              صيد اللؤلؤ - {g.label}
-            </h3>
+        <div className="mt-4">
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="text-base">{g.emoji}</span>
+            <h3 className={'font-extrabold text-xs ' + g.text}>صيد اللؤلؤ - {g.label}</h3>
           </div>
-          <div className="bg-white/90 rounded-3xl border border-sky-100 divide-y divide-sky-50 shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl border border-sky-100 divide-y divide-sky-50 shadow-2xs overflow-hidden">
             {teammates.map((t) => {
-              const tItems = getVisibleItems(
-                clock.dayIndex,
-                t.tier,
-                challengeText
-              );
+              const tItems = getVisibleItems(clock.dayIndex, t.tier, challengeText);
               const tPercent = percentFor(tItems, daily[t.id], weekly[t.id]);
               return (
-                <div
-                  key={t.id}
-                  className={
-                    'flex items-center justify-between px-4 py-3 ' +
-                    (t.id === student.id ? 'bg-sky-50/70' : '')
-                  }
-                >
-                  <span
-                    className={
-                      'text-sm ' +
-                      (t.id === student.id
-                        ? 'font-extrabold text-teal-700'
-                        : 'text-slate-600')
-                    }
-                  >
+                <div key={t.id} className={'flex items-center justify-between px-3 py-2 ' + (t.id === student.id ? 'bg-sky-50/70' : '')}>
+                  <span className={'text-xs ' + (t.id === student.id ? 'font-extrabold text-teal-700' : 'text-slate-600')}>
                     {t.name} {t.id === student.id && '(أنتِ)'}
                   </span>
-                  <PearlBar percent={tPercent} count={8} />
+                  <PearlBar percent={tPercent} count={7} />
                 </div>
               );
             })}
@@ -1036,30 +730,22 @@ function StudentFlow({ onExit }) {
   );
 }
 
-/* ---------------------------------------------------------------
-   مسار المشرفات
---------------------------------------------------------------- */
 function SupervisorFlow({ onExit }) {
-  const [step, setStep] = useState('choose'); // choose -> password -> dashboard
+  const [step, setStep] = useState('choose');
   const [chosen, setChosen] = useState(null);
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
 
   if (step === 'choose') {
     return (
-      <div className="min-h-screen ocean-bg flex items-center justify-center p-6">
-        <div className="bg-white/90 rounded-3xl shadow-lg border border-sky-100 p-8 max-w-sm w-full text-center">
-          <button
-            onClick={onExit}
-            className="flex items-center gap-1 text-slate-400 hover:text-teal-600 text-sm mb-4"
-          >
-            <ArrowRight size={16} /> رجوع
+      <div className="p-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-sky-100 p-6 text-center">
+          <button onClick={onExit} className="flex items-center gap-1 text-slate-400 hover:text-teal-600 text-xs mb-3">
+            <ArrowRight size={14} /> رجوع
           </button>
-          <div className="text-4xl mb-2">🪸👩‍🏫</div>
-          <h2 className="font-extrabold text-rose-600 text-lg mb-4">
-            من المشرفة؟
-          </h2>
-          <div className="space-y-3">
+          <div className="text-3xl mb-1">🪸👩‍🏫</div>
+          <h2 className="font-extrabold text-rose-600 text-base mb-3">من المشرفة؟</h2>
+          <div className="space-y-2">
             {SUPERVISORS.map((sup) => (
               <button
                 key={sup.id}
@@ -1069,7 +755,7 @@ function SupervisorFlow({ onExit }) {
                   setErr('');
                   setCode('');
                 }}
-                className="w-full bg-sky-50 hover:bg-sky-100 border border-sky-100 rounded-2xl py-3 font-bold text-slate-700 transition"
+                className="w-full bg-sky-50 hover:bg-sky-100 border border-sky-100 rounded-xl py-2.5 font-bold text-slate-700 text-xs transition"
               >
                 {sup.name}
               </button>
@@ -1082,42 +768,28 @@ function SupervisorFlow({ onExit }) {
 
   if (step === 'password') {
     return (
-      <div className="min-h-screen ocean-bg flex items-center justify-center p-6">
-        <div className="bg-white/90 rounded-3xl shadow-lg border border-sky-100 p-8 max-w-sm w-full text-center">
-          <button
-            onClick={() => setStep('choose')}
-            className="flex items-center gap-1 text-slate-400 hover:text-teal-600 text-sm mb-4"
-          >
-            <ArrowRight size={16} /> رجوع
+      <div className="p-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-sky-100 p-6 text-center">
+          <button onClick={() => setStep('choose')} className="flex items-center gap-1 text-slate-400 hover:text-teal-600 text-xs mb-3">
+            <ArrowRight size={14} /> رجوع
           </button>
-          <div className="text-4xl mb-2">🔒</div>
-          <h2 className="font-extrabold text-rose-600 text-lg">
-            {chosen.name}
-          </h2>
-          <p className="text-slate-400 text-sm mt-1">
-            أدخلي كلمة المرور الخاصة بكِ
-          </p>
+          <div className="text-3xl mb-1">🔒</div>
+          <h2 className="font-extrabold text-rose-600 text-base">{chosen.name}</h2>
+          <p className="text-slate-400 text-xs mt-1">أدخلي كلمة المرور الخاصّة بكِ</p>
           <input
             type="password"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder="كلمة المرور"
-            className="mt-5 w-full text-center border border-sky-200 rounded-xl py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-300"
+            className="mt-4 w-full text-center border border-sky-200 rounded-xl py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-300"
           />
-          {err && <div className="text-rose-500 text-xs mt-2">{err}</div>}
+          {err && <div className="text-rose-500 text-xs mt-1.5">{err}</div>}
           <button
-            onClick={() =>
-              code === chosen.code
-                ? setStep('dashboard')
-                : setErr('كلمة المرور غير صحيحة، حاولي مجدداً')
-            }
-            className="mt-4 w-full bg-gradient-to-l from-rose-400 to-pink-500 text-white font-bold py-2.5 rounded-xl shadow-md hover:opacity-90"
+            onClick={() => (code === chosen.code ? setStep('dashboard') : setErr('كلمة المرور غير صحيحة'))}
+            className="mt-3.5 w-full bg-gradient-to-l from-rose-400 to-pink-500 text-white font-bold py-2.5 rounded-xl shadow hover:opacity-90 text-xs"
           >
             دخول
           </button>
-          <div className="text-[11px] text-slate-300 mt-3">
-            للتجربة: {chosen.code}
-          </div>
         </div>
       </div>
     );
@@ -1160,15 +832,12 @@ function SupervisorDashboard({ onExit, supervisor }) {
     refresh();
   }, [refresh]);
 
-  // تحديث حي للوحة كل فترة قصيرة (سباق حي بين المجموعتين)
   useEffect(() => {
     const iv = setInterval(() => {
-      Promise.all([loadJSON(clock.dailyKey), loadJSON(clock.weeklyKey)]).then(
-        ([d, w]) => {
-          setDaily(d);
-          setWeekly(w);
-        }
-      );
+      Promise.all([loadJSON(clock.dailyKey), loadJSON(clock.weeklyKey)]).then(([d, w]) => {
+        setDaily(d);
+        setWeekly(w);
+      });
     }, 15000);
     return () => clearInterval(iv);
   }, [clock.dailyKey, clock.weeklyKey]);
@@ -1189,12 +858,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
     });
   }, [daily, weekly, clock.dayIndex, challengeText]);
 
-  const { averages: groupAverages, burst: groupBurst } = useGroupRace(
-    clock.dayIndex,
-    challengeText,
-    daily,
-    weekly
-  );
+  const { averages: groupAverages, burst: groupBurst } = useGroupRace(clock.dayIndex, challengeText, daily, weekly);
 
   const leaderboard = useMemo(
     () =>
@@ -1221,16 +885,14 @@ function SupervisorDashboard({ onExit, supervisor }) {
 
   if (loading || !daily || !weekly || !pins) {
     return (
-      <div className="min-h-screen ocean-bg flex items-center justify-center">
-        <div className="text-teal-600 font-bold text-lg animate-pulse">
-          🌊 جارِ إحضار لوحة التحكم...
-        </div>
+      <div className="p-8 text-center text-teal-600 font-bold text-xs animate-pulse">
+        🌊 جارِ إحضار لوحة التحكم...
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen ocean-bg pb-16">
+    <div className="pb-8">
       <TopBar
         onExit={onExit}
         title={`أهلاً ${supervisor.name} 🪸`}
@@ -1238,7 +900,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
         countdownMs={clock.msRemaining}
       />
 
-      <div className="max-w-3xl mx-auto px-4 mt-6 space-y-6">
+      <div className="px-4 mt-3 space-y-3.5">
         <GroupRace
           coralPercent={groupAverages.coral}
           pearlPercent={groupAverages.pearl}
@@ -1246,147 +908,101 @@ function SupervisorDashboard({ onExit, supervisor }) {
           pearlBurst={groupBurst.pearl}
         />
 
-        {/* لوحة كتابة تحدي الأربعاء */}
-        <div className="bg-white/90 rounded-3xl border border-sky-100 p-5 shadow-sm">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-xl">🦪</span>
-            <h3 className="font-extrabold text-slate-700">
-              تحدي الأربعاء الأسبوعي
-            </h3>
+        <div className="bg-white rounded-2xl border border-sky-100 p-3.5 shadow-2xs">
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="text-base">🦪</span>
+            <h3 className="font-extrabold text-slate-700 text-xs">تحدي الأربعاء الأسبوعي</h3>
           </div>
           <textarea
             value={challengeDraft}
             onChange={(e) => setChallengeDraft(e.target.value)}
-            placeholder="اكتبي هنا تفاصيل تحدي المحارة المفتوحة لهذا الأسبوع..."
-            rows={3}
-            className="w-full border border-sky-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-300 resize-none"
+            placeholder="اكتبي تفاصيل تحدي المحارة لهذا الأسبوع..."
+            rows={2}
+            className="w-full border border-sky-200 rounded-xl p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-300 resize-none"
           />
-          <div className="flex items-center justify-between mt-2">
-            <span className="text-[11px] text-slate-400">
-              سيظهر تلقائياً للطالبات يوم الأربعاء
-            </span>
+          <div className="flex items-center justify-between mt-1.5">
+            <span className="text-[10px] text-slate-400">سيظهر للطالبات يوم الأربعاء</span>
             <button
               onClick={saveChallenge}
               disabled={savingChallenge}
-              className="bg-gradient-to-l from-teal-500 to-cyan-500 text-white text-sm font-bold px-5 py-2 rounded-xl shadow hover:opacity-90 disabled:opacity-60"
+              className="bg-gradient-to-l from-teal-500 to-cyan-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-lg shadow hover:opacity-90 disabled:opacity-60"
             >
-              {savingChallenge ? 'جارِ الحفظ...' : 'حفظ التحدي'}
+              {savingChallenge ? 'حفظ...' : 'حفظ التحدي'}
             </button>
           </div>
         </div>
 
-        <div className="bg-white/90 rounded-3xl border border-sky-100 p-5 shadow-sm">
-          <div className="flex items-center gap-2 mb-3">
-            <Trophy size={18} className="text-amber-400" />
-            <h3 className="font-extrabold text-slate-700">
-              جدول الأوائل اليوم
-            </h3>
+        <div className="bg-white rounded-2xl border border-sky-100 p-3.5 shadow-2xs">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Trophy size={16} className="text-amber-400" />
+            <h3 className="font-extrabold text-slate-700 text-xs">جدول الأوائل اليوم</h3>
           </div>
           {leaderboard.length === 0 ? (
-            <div className="text-slate-400 text-sm text-center py-4">
-              لم تُتمّ أي طالبة وردها بعد اليوم 🐚
-            </div>
+            <div className="text-slate-400 text-xs text-center py-2">لم تُتمّ أي طالبة وردها بعد 🐚</div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {leaderboard.map((r, i) => (
-                <div
-                  key={r.id}
-                  className="flex items-center justify-between bg-sky-50/60 rounded-xl px-3 py-2"
-                >
-                  <span className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                <div key={r.id} className="flex items-center justify-between bg-sky-50/60 rounded-xl px-2.5 py-1.5">
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
                     <span>{['🥇', '🥈', '🥉'][i]}</span>
                     {r.name}
-                    <span className="text-xs text-slate-400">
-                      ({GROUPS[r.group].label})
-                    </span>
+                    <span className="text-[10px] text-slate-400 font-normal">({GROUPS[r.group].label})</span>
                   </span>
-                  <span className="text-xs text-emerald-600 font-bold">
-                    اكتمل ✓
-                  </span>
+                  <span className="text-[10px] text-emerald-600 font-bold">اكتمل ✓</span>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="bg-white/90 rounded-3xl border border-sky-100 p-5 shadow-sm">
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <div className="flex items-center gap-1 bg-sky-50 rounded-xl px-3 py-1.5 flex-1 min-w-[140px]">
-              <Search size={15} className="text-slate-400" />
+        <div className="bg-white rounded-2xl border border-sky-100 p-3.5 shadow-2xs">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <div className="flex items-center gap-1 bg-sky-50 rounded-xl px-2.5 py-1 flex-1 min-w-[120px]">
+              <Search size={13} className="text-slate-400" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="ابحثي عن طالبة..."
-                className="bg-transparent outline-none text-sm flex-1"
+                placeholder="ابحثي..."
+                className="bg-transparent outline-none text-xs flex-1"
               />
             </div>
             <select
               value={groupFilter}
               onChange={(e) => setGroupFilter(e.target.value)}
-              className="text-sm border border-sky-200 rounded-xl px-2 py-1.5 bg-white"
+              className="text-xs border border-sky-200 rounded-xl px-2 py-1 bg-white"
             >
-              <option value="all">كل المجموعات</option>
+              <option value="all">الكل</option>
               <option value="coral">🪸 المرجان</option>
               <option value="pearl">🦪 اللؤلؤ</option>
             </select>
             <button
               onClick={() => setOnlyPending((v) => !v)}
-              className={
-                'flex items-center gap-1 text-sm rounded-xl px-3 py-1.5 border ' +
-                (onlyPending
-                  ? 'bg-rose-100 border-rose-300 text-rose-600'
-                  : 'border-sky-200 text-slate-500')
-              }
+              className={'flex items-center gap-1 text-xs rounded-xl px-2 py-1 border ' + (onlyPending ? 'bg-rose-100 border-rose-300 text-rose-600' : 'border-sky-200 text-slate-500')}
             >
-              <Filter size={14} /> لم تكمل بعد
-            </button>
-            <button
-              onClick={refresh}
-              className="text-xs text-teal-600 underline"
-            >
-              تحديث
+              <Filter size={12} /> لم تكمل
             </button>
           </div>
 
-          <div className="max-h-96 overflow-y-auto divide-y divide-sky-50">
-            {filteredRows.length === 0 && (
-              <div className="text-center text-slate-400 text-sm py-6">
-                لا توجد نتائج مطابقة
-              </div>
-            )}
+          <div className="max-h-64 overflow-y-auto divide-y divide-sky-50">
+            {filteredRows.length === 0 && <div className="text-center text-slate-400 text-xs py-4">لا توجد نتائج</div>}
             {filteredRows.map((r) => {
               const badge = TIER_BADGE[r.tier];
               const hasPin = !!pins[r.id];
               return (
-                <div
-                  key={r.id}
-                  className="flex items-center justify-between py-2.5 px-1"
-                >
-                  <span className="text-sm text-slate-700 flex items-center gap-1.5">
+                <div key={r.id} className="flex items-center justify-between py-2 px-0.5">
+                  <span className="text-xs text-slate-700 flex items-center gap-1">
                     {GROUPS[r.group].emoji} {r.name}
-                    {badge && (
-                      <span className="text-[10px] text-amber-500">
-                        {badge.emoji}
-                      </span>
-                    )}
+                    {badge && <span className="text-[9px] text-amber-500">{badge.emoji}</span>}
                   </span>
-                  <div className="flex items-center gap-3">
-                    <PearlBar percent={r.percent} count={6} />
-                    <span className="text-xs text-slate-400 w-9 text-left">
-                      {r.percent}%
-                    </span>
+                  <div className="flex items-center gap-2">
+                    <PearlBar percent={r.percent} count={5} />
+                    <span className="text-[10px] text-slate-400 w-6 text-left">{r.percent}%</span>
                     {hasPin ? (
-                      <button
-                        onClick={() => resetPin(r.id)}
-                        title="إعادة تعيين الرمز السري"
-                        className="text-[10px] text-rose-400 hover:text-rose-600 flex items-center gap-0.5"
-                      >
-                        <Lock size={11} /> إعادة تعيين
+                      <button onClick={() => resetPin(r.id)} className="text-[9px] text-rose-400 hover:text-rose-600 flex items-center gap-0.5">
+                        <Lock size={10} /> إعادة
                       </button>
                     ) : (
-                      <span className="text-[10px] text-slate-300">
-                        بلا رمز بعد
-                      </span>
+                      <span className="text-[9px] text-slate-300">بلا رمز</span>
                     )}
                   </div>
                 </div>
@@ -1400,17 +1016,13 @@ function SupervisorDashboard({ onExit, supervisor }) {
 }
 
 /* ---------------------------------------------------------------
-   التطبيق الرئيسي
+   التطبيق الرئيسي مع الحاوية المحاكية لشاشة الجوال
 --------------------------------------------------------------- */
 export default function App() {
   const [role, setRole] = useState(null);
 
   return (
-    <div
-      dir="rtl"
-      className="text-slate-800"
-      style={{ fontFamily: 'Cairo, Tahoma, sans-serif' }}
-    >
+    <div dir="rtl" className="min-h-screen bg-slate-900 flex justify-center items-center p-2 sm:p-6" style={{ fontFamily: 'Cairo, Tahoma, sans-serif' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
         .ocean-bg { background: linear-gradient(180deg, #eafcff 0%, #f3fcfb 55%, #ffffff 100%); }
@@ -1430,9 +1042,20 @@ export default function App() {
         .splash-pop { animation: splashPop 0.9s ease-out; }
       `}</style>
 
-      {role === null && <RoleSelect onSelect={setRole} />}
-      {role === 'student' && <StudentFlow onExit={() => setRole(null)} />}
-      {role === 'supervisor' && <SupervisorFlow onExit={() => setRole(null)} />}
+      {/* إطار محاكي شاشة الجوال (App Viewport Window) */}
+      <div className="w-full max-w-[390px] min-h-[670px] max-h-[880px] ocean-bg rounded-[38px] shadow-2xl border-4 border-slate-700/80 overflow-y-auto relative flex flex-col justify-between">
+        {/* الحافة العلوية لفرام الجوال (Notch Bar) */}
+        <div className="w-28 h-4 bg-slate-800 rounded-b-xl mx-auto shrink-0 sticky top-0 z-40 opacity-90 mb-1"></div>
+
+        <div className="flex-1">
+          {role === null && <RoleSelect onSelect={setRole} />}
+          {role === 'student' && <StudentFlow onExit={() => setRole(null)} />}
+          {role === 'supervisor' && <SupervisorFlow onExit={() => setRole(null)} />}
+        </div>
+
+        {/* خط الهوم الأسفل في آيفون/جوال */}
+        <div className="w-24 h-1 bg-slate-300 rounded-full mx-auto my-2 shrink-0 opacity-60"></div>
+      </div>
     </div>
   );
 }
