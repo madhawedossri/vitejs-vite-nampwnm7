@@ -1,8 +1,11 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search, Trophy, X, Filter, ArrowRight, Lock } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 
+/* ---------------------------------------------------------------
+   إعدادات Firebase — وصل التطبيق بقاعدة بيانات حقيقية دائمة
+--------------------------------------------------------------- */
 const firebaseConfig = {
   apiKey: 'AIzaSyCs8d8Hnx99ZNl0-SQafQuf4CtQj40c69k',
   authDomain: 'wird-artaqaa.firebaseapp.com',
@@ -14,6 +17,9 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
 
+/* ---------------------------------------------------------------
+   بيانات ثابتة: أسماء الطالبات، المجموعات، والفئات (الدورات)
+--------------------------------------------------------------- */
 const NAMES = [
   'سارة', 'لين', 'جنى', 'دانة', 'رهف', 'لمى', 'غلا', 'وعد', 'تالا', 'ريم',
   'جود', 'سديم', 'لجين', 'شهد', 'ملك', 'رغد', 'فرح', 'هيا', 'نوف', 'بشائر',
@@ -47,11 +53,23 @@ const SUPERVISORS = [
   { id: 'amjad', name: 'أستاذة أمجاد', code: '1111' },
   { id: 'batool', name: 'أستاذة البتول', code: '2222' },
 ];
+
 const DAY_NAMES_BY_INDEX = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+const CUTOFF_HOUR = 16;
+const CUTOFF_MIN = 30;
+
+function getWeekKey(d = new Date()) {
+  const day = d.getDay();
+  const diff = (day - 6 + 7) % 7;
+  const sat = new Date(d);
+  sat.setDate(d.getDate() - diff);
+  return sat.toISOString().slice(0, 10);
+}
 
 function getCycleStart(now) {
   const c = new Date(now);
-  c.setHours(16, 30, 0, 0);
+  c.setHours(CUTOFF_HOUR, CUTOFF_MIN, 0, 0);
   if (now.getTime() < c.getTime()) c.setDate(c.getDate() - 1);
   return c;
 }
@@ -75,9 +93,7 @@ function useCycleClock() {
   const cycleEnd = new Date(cycleStart);
   cycleEnd.setDate(cycleEnd.getDate() + 1);
   const dateKey = cycleStart.toISOString().slice(0, 10);
-  const sat = new Date(cycleStart);
-  sat.setDate(cycleStart.getDate() - ((cycleStart.getDay() - 6 + 7) % 7));
-  const weekKey = sat.toISOString().slice(0, 10);
+  const weekKey = getWeekKey(cycleStart);
 
   return {
     now,
@@ -125,6 +141,17 @@ function percentFor(items, dailySaved, weeklySaved) {
   if (items.length === 0) return 0;
   const done = items.filter((it) => isItemDone(it, dailySaved, weeklySaved)).length;
   return Math.round((done / items.length) * 100);
+}
+
+function computeGroupAverages(dayIndex, challengeText, daily, weekly) {
+  const sums = { coral: [], pearl: [] };
+  STUDENTS.forEach((s) => {
+    const items = getVisibleItems(dayIndex, s.tier, challengeText);
+    const percent = percentFor(items, daily?.[s.id], weekly?.[s.id]);
+    sums[s.group].push(percent);
+  });
+  const avg = (arr) => (arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0);
+  return { coral: avg(sums.coral), pearl: avg(sums.pearl) };
 }
 
 const PINS_KEY = `student-pins-v1`;
@@ -177,6 +204,88 @@ function PearlBar({ percent, count = 10, big = false }) {
           }}
         />
       ))}
+    </div>
+  );
+}
+
+function RaceLane({ emoji, percent, trackTint }) {
+  const clamped = Math.max(0, Math.min(100, percent));
+  return (
+    <div dir="ltr" style={{ position: 'relative', height: '48px', borderRadius: '24px', overflow: 'hidden', border: '1px solid #e0f2fe', backgroundColor: trackTint }}>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', color: '#7dd3fc', userSelect: 'none' }}>
+        <span style={{ fontSize: '14px' }}>🚩</span>
+        <span style={{ fontSize: '18px' }}>🏆</span>
+      </div>
+      <div style={{ position: 'absolute', top: 0, bottom: 0, display: 'flex', alignItems: 'center', transition: 'all 0.7s ease-out', left: `calc(${clamped}% * 0.78 + 4%)` }}>
+        <span style={{ fontSize: '24px' }}>{emoji}</span>
+      </div>
+    </div>
+  );
+}
+
+function GroupRace({ coralPercent, pearlPercent }) {
+  const diff = coralPercent - pearlPercent;
+  let banner;
+  if (coralPercent === 0 && pearlPercent === 0) {
+    banner = '🌊 السباق لم يبدأ بعد.. من ستغطس أولاً؟';
+  } else if (diff === 0) {
+    banner = '🌊 تعادل مثير بين الفريقين! السباق مشتعل 🔥';
+  } else if (diff > 0) {
+    banner = `🪸 المرجان تتقدّم بفارق ${diff}%! هيا يا لؤلؤ 🏊‍♀️`;
+  } else {
+    banner = `🦪 اللؤلؤ تتقدّم بفارق ${Math.abs(diff)}%! هيا يا مرجان 🏊‍♀️`;
+  }
+  return (
+    <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+        <span style={{ fontSize: '18px' }}>🏊‍♀️</span>
+        <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '14px', margin: 0 }}>سباق اللآلئ بين الفريقين</h3>
+      </div>
+      <p style={{ fontSize: '11px', color: '#94a3b8', margin: '0 0 12px 0' }}>{banner}</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold', color: '#e11d48', marginBottom: '4px' }}>
+            <span>🪸 المرجان</span>
+            <span>{coralPercent}%</span>
+          </div>
+          <RaceLane emoji="🐠" percent={coralPercent} trackTint="#fff1f2" />
+        </div>
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: 'bold', color: '#0f766e', marginBottom: '4px' }}>
+            <span>🦪 اللؤلؤ</span>
+            <span>{pearlPercent}%</span>
+          </div>
+          <RaceLane emoji="🐬" percent={pearlPercent} trackTint="#f0fdfa" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------
+   بطاقة التهنئة النافذة مع صوت تشجيع بدون موسيقى 👏🎉
+--------------------------------------------------------------- */
+function CelebrationModal({ onClose }) {
+  useEffect(() => {
+    // تشغيل صوت تشجيع وتصفيق (بدون أي موسيقى) فور فتح البطاقة
+    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3');
+    audio.play().catch(() => {});
+  }, []);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', padding: '16px' }}>
+      <div style={{ position: 'relative', backgroundColor: '#ffffff', borderRadius: '28px', maxWidth: '320px', width: '100%', padding: '24px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: '12px', left: '12px', background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer' }}>
+          <X size={20} />
+        </button>
+        <div style={{ fontSize: '50px', margin: '10px 0' }}>🦪✨</div>
+        <h3 style={{ fontSize: '20px', fontWeight: '800', color: '#0f766e', margin: '8px 0' }}>أحسنتِ يا لؤلؤة الحلقة! 🌟</h3>
+        <p style={{ color: '#64748b', fontSize: '13px', margin: '4px 0' }}>أتممتِ وردكِ اليوم بنجاح</p>
+        <p style={{ color: '#d97706', fontWeight: 'bold', fontSize: '13px', margin: '12px 0' }}>لا تنسين إرسال البطاقة 🍯</p>
+        <button onClick={onClose} style={{ width: '100%', backgroundColor: '#0d9488', color: '#ffffff', border: 'none', padding: '12px', borderRadius: '14px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px', marginTop: '10px' }}>
+          الحمد لله 💙
+        </button>
+      </div>
     </div>
   );
 }
@@ -253,6 +362,7 @@ function StudentFlow({ onExit }) {
   const [weekly, setWeekly] = useState(null);
   const [challengeText, setChallengeText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   useEffect(() => { loadJSON(PINS_KEY).then(setPins); }, []);
 
@@ -304,6 +414,7 @@ function StudentFlow({ onExit }) {
   const myDaily = student ? daily?.[student.id] : null;
   const myWeekly = student ? weekly?.[student.id] : null;
   const percent = useMemo(() => percentFor(items, myDaily, myWeekly), [items, myDaily, myWeekly]);
+  const groupAverages = useMemo(() => computeGroupAverages(clock.dayIndex, challengeText, daily, weekly), [clock.dayIndex, challengeText, daily, weekly]);
 
   const toggleItem = async (item) => {
     if (!student || !daily || !weekly) return;
@@ -320,6 +431,7 @@ function StudentFlow({ onExit }) {
       };
       setWeekly(updatedWeekly);
       await saveJSON(clock.weeklyKey, updatedWeekly);
+      if (percentFor(items, myDaily, updatedWeekly[student.id]) === 100) setShowCelebration(true);
     } else {
       const current = daily[student.id] || { items: {}, completedAt: null };
       const newItems = { ...current.items, [item.id]: !current.items[item.id] };
@@ -333,6 +445,7 @@ function StudentFlow({ onExit }) {
       };
       setDaily(updatedDaily);
       await saveJSON(clock.dailyKey, updatedDaily);
+      if (newPercent === 100 && current.completedAt == null) setShowCelebration(true);
     }
   };
 
@@ -406,6 +519,7 @@ function StudentFlow({ onExit }) {
 
   return (
     <div>
+      {showCelebration && <CelebrationModal onClose={() => setShowCelebration(false)} />}
       <TopBar onExit={() => { setStudent(null); setPendingStudent(null); }} title={`أهلاً، ${student.name} ${g.emoji}`} subtitle={DAY_NAMES_BY_INDEX[clock.dayIndex]} countdownMs={clock.msRemaining} />
       
       <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
@@ -415,6 +529,8 @@ function StudentFlow({ onExit }) {
         </div>
         <PearlBar percent={percent} big />
       </div>
+
+      <GroupRace coralPercent={groupAverages.coral} pearlPercent={groupAverages.pearl} />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
         {items.map((it) => {
@@ -511,7 +627,6 @@ function SupervisorDashboard({ onExit, supervisor }) {
   const [weekly, setWeekly] = useState(null);
   const [pins, setPins] = useState(null);
   const [challengeText, setChallengeText] = useState('');
-  const [challengeDraft, setChallengeDraft] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -520,7 +635,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
       loadChallengeText(clock.challengeKey),
       loadJSON(PINS_KEY),
     ]).then(([d, w, c, p]) => {
-      setDaily(d); setWeekly(w); setChallengeText(c); setChallengeDraft(c); setPins(p);
+      setDaily(d); setWeekly(w); setChallengeText(c); setPins(p);
     });
   }, [clock.dailyKey, clock.weeklyKey, clock.challengeKey]);
 
