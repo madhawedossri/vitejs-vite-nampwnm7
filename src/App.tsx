@@ -931,19 +931,105 @@ export default function App() {
       </div>
     </div>
   );
-}<button onClick={() => resetPin(r.id)} style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer', padding: 0 }}>
-                        <Lock size={12} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  }
+return <SupervisorDashboard onExit={onExit} supervisor={chosen} />;
+}
+
+function SupervisorDashboard({ onExit, supervisor }) {
+  const clock = useCycleClock();
+  const [daily, setDaily] = useState({});
+  const [weekly, setWeekly] = useState({});
+  const [pins, setPins] = useState({});
+  const [challengeText, setChallengeText] = useState('');
+  const [challengeDraft, setChallengeDraft] = useState('');
+  const [savingChallenge, setSavingChallenge] = useState(false);
+  const [groupFilter, setGroupFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [selectedDayIdx, setSelectedDayIdx] = useState(clock.dayIndex);
+
+  const availableDays = useMemo(() => {
+    const weekOrder = [6, 0, 1, 2, 3, 4, 5];
+    const currentOrderPos = weekOrder.indexOf(clock.dayIndex);
+    const result = [];
+    for (let i = 0; i <= currentOrderPos; i++) {
+      const idx = weekOrder[i];
+      result.push({ idx, name: DAY_NAMES[idx] });
+    }
+    return result;
+  }, [clock.dayIndex]);
+
+  useEffect(() => {
+    const unsubDaily = onSnapshot(doc(db, 'wird', clock.dailyKey), (snap) => {
+      if (snap.exists() && snap.data().value) setDaily(JSON.parse(snap.data().value));
+      else setDaily({});
+    });
+
+    const unsubWeekly = onSnapshot(doc(db, 'wird', clock.weeklyKey), (snap) => {
+      if (snap.exists() && snap.data().value) setWeekly(JSON.parse(snap.data().value));
+      else setWeekly({});
+    });
+
+    const unsubChallenge = onSnapshot(doc(db, 'wird', clock.challengeKey), (snap) => {
+      if (snap.exists()) {
+        const val = snap.data().value || '';
+        setChallengeText(val);
+        setChallengeDraft(val);
+      }
+    });
+
+    loadJSON(PINS_KEY).then((data) => setPins(data || {}));
+
+    return () => { unsubDaily(); unsubWeekly(); unsubChallenge(); };
+  }, [clock.dailyKey, clock.weeklyKey, clock.challengeKey]);
+
+  const resetPin = async (studentId) => {
+    const updated = { ...pins };
+    delete updated[studentId];
+    setPins(updated);
+    await saveJSON(PINS_KEY, updated);
+  };
+
+  const saveChallenge = async () => {
+    setSavingChallenge(true);
+    await saveChallengeText(clock.challengeKey, challengeDraft);
+    setSavingChallenge(false);
+  };
+
+  const rows = useMemo(() => {
+    return STUDENTS.map((s) => {
+      const items = getVisibleItems(selectedDayIdx, s.tier, challengeText);
+      const percent = percentFor(items, daily[s.id], weekly[s.id]);
+      const hasCumulative = !!weekly[s.id]?.cumulativeReview?.completed;
+      return { ...s, percent, hasCumulative, completedAt: daily[s.id]?.completedAt || null };
+    });
+  }, [daily, weekly, selectedDayIdx, challengeText]);
+
+  const groupAverages = useMemo(() => computeGroupAverages(selectedDayIdx, challengeText, daily, weekly), [selectedDayIdx, challengeText, daily, weekly]);
+
+  const leaderboard = useMemo(() => {
+    return rows
+      .filter((r) => r.completedAt)
+      .sort((a, b) => new Date(a.completedAt) - new Date(b.completedAt))
+      .slice(0, 3);
+  }, [rows]);
+
+  const sortedRows = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      if (a.percent === 100 && b.percent !== 100) return -1;
+      if (a.percent !== 100 && b.percent === 100) return 1;
+      if (a.percent === 100 && b.percent === 100) {
+        return new Date(a.completedAt) - new Date(b.completedAt);
+      }
+      return 0;
+    });
+  }, [rows]);
+
+  const filteredRows = sortedRows.filter((r) => {
+    if (groupFilter === 'coral' && r.group !== 'coral') return false;
+    if (groupFilter === 'pearl' && r.group !== 'pearl') return false;
+    if (groupFilter === 'third' && r.tier !== 'third') return false;
+    if (search && !r.name.includes(search)) return false;
+    return true;
+  });
 
   return (
     <div>
@@ -1065,4 +1151,3 @@ export default function App() {
       </div>
     </div>
   );
-}
