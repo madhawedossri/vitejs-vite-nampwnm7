@@ -70,7 +70,7 @@ const MAX_OPTION_IDX = 13;
 const PROGRAM_START_DATE_KSA = '2026-08-29';
 
 /* ---------------------------------------------------------------
-   حساب التوقيت ورقم اليوم الفعلي بالبرنامج
+   حساب التوقيت بحيث يبدأ اليوم الجديد تماماً الساعة 4:30 عصراً
 --------------------------------------------------------------- */
 const CUTOFF_HOUR = 16;
 const CUTOFF_MIN = 30;
@@ -85,6 +85,7 @@ function useCycleClock() {
   const ksaNowString = now.toLocaleString('en-US', { timeZone: 'Asia/Riyadh', hour12: false });
   const ksaNow = new Date(ksaNowString);
 
+  // حساب دورة الورد (تبدأ من 4:30 عصراً وتنتهي 4:30 عصر اليوم التالي)
   const cycleStart = new Date(ksaNow);
   cycleStart.setHours(CUTOFF_HOUR, CUTOFF_MIN, 0, 0);
   if (ksaNow.getTime() < cycleStart.getTime()) {
@@ -94,20 +95,16 @@ function useCycleClock() {
   const cycleEnd = new Date(cycleStart);
   cycleEnd.setDate(cycleEnd.getDate() + 1);
 
-  const realDayOfWeek = cycleStart.getDay();
   const formattedDate = cycleStart.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' });
 
-  const startDateObj = new Date(PROGRAM_START_DATE_KSA + 'T00:00:00');
-  const startMidnight = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate());
-  const cycleMidnight = new Date(cycleStart.getFullYear(), cycleStart.getMonth(), cycleStart.getDate());
-  const programDayIndex = Math.round((cycleMidnight.getTime() - startMidnight.getTime()) / 86400000);
+  const startDateObj = new Date(PROGRAM_START_DATE_KSA + 'T16:30:00');
+  const programDayIndex = Math.floor((cycleStart.getTime() - startDateObj.getTime()) / 86400000);
 
   return {
     now,
-    realDayOfWeek,
     formattedDate,
     msRemaining: cycleEnd.getTime() - now.getTime(),
-    programDayIndex,
+    programDayIndex: Math.max(0, programDayIndex),
   };
 }
 
@@ -370,7 +367,7 @@ function TopBar({ onExit, title, formattedDate, countdownMs, staticDayLabel }) {
 
       {typeof countdownMs === 'number' && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '10px', fontSize: '11px', color: '#0f766e', backgroundColor: '#f0fdfa', border: '1px solid #ccfbf1', borderRadius: '20px', padding: '6px 14px', width: 'fit-content', margin: '10px auto 0' }}>
-          <span>المتبقي لنهاية الوقت:</span>
+          <span>المتبقي لنهاية الورد (الساعة 4:30 عصراً):</span>
           <span style={{ fontWeight: 'bold', color: '#0d9488', fontFamily: 'monospace', fontSize: '12px' }}>{formatDuration(countdownMs)}</span>
         </div>
       )}
@@ -435,7 +432,6 @@ function StudentFlow({ onExit }) {
     });
   }, [availableDays, student]);
 
-  // اليوم مقفول تلقائياً على اليوم الحالي الفعلي للجميع بدون إمكانية تغيير
   const selectedOptionIdx = useMemo(() => clampToProgramRange(clock.programDayIndex), [clock.programDayIndex]);
 
   useEffect(() => { loadJSON(PINS_KEY).then((data) => setPins(data || {})); }, []);
@@ -789,20 +785,16 @@ function SupervisorDashboard({ onExit, supervisor }) {
   const [daily, setDaily] = useState({});
   const [weekly, setWeekly] = useState({});
   const [pins, setPins] = useState({});
-  const [wedChallengeText, setWedChallengeText] = useState('');
-  const [wedDraft, setWedDraft] = useState('');
-  const [savingChallenge, setSavingChallenge] = useState(false);
   const [groupFilter, setGroupFilter] = useState('all');
   const [search, setSearch] = useState('');
 
   const supervisorAvailableDays = useMemo(() => buildAvailableDays(), []);
-
-  // المشرفة مثل الطالبة، مربوطة حصرياً باليوم الحالي الفعلي لضمان التزامن الفوري بنسبة 100%
   const selectedOptionIdx = useMemo(() => clampToProgramRange(clock.programDayIndex), [clock.programDayIndex]);
 
   const currentDailyKey = `wird-daily_option_${selectedOptionIdx}`;
   const currentWeeklyKey = `wird-weekly_week_1`;
   const currentWedChallengeKey = `wed-challenge_week_${Math.floor(selectedOptionIdx / 7) + 1}`;
+  const [wedChallengeText, setWedChallengeText] = useState('');
 
   useEffect(() => {
     const unsubDaily = onSnapshot(doc(db, 'wird', currentDailyKey), (snap) => {
@@ -816,13 +808,8 @@ function SupervisorDashboard({ onExit, supervisor }) {
     });
 
     const unsubWed = onSnapshot(doc(db, 'wird', currentWedChallengeKey), (snap) => {
-      if (snap.exists() && snap.data().value) {
-        setWedChallengeText(snap.data().value);
-        setWedDraft(snap.data().value);
-      } else {
-        setWedChallengeText('');
-        setWedDraft('');
-      }
+      if (snap.exists() && snap.data().value) setWedChallengeText(snap.data().value);
+      else setWedChallengeText('');
     });
 
     loadJSON(PINS_KEY).then((data) => setPins(data || {}));
@@ -835,13 +822,6 @@ function SupervisorDashboard({ onExit, supervisor }) {
     delete updated[studentId];
     setPins(updated);
     await saveJSON(PINS_KEY, updated);
-  };
-
-  const saveWedChallenge = async () => {
-    setSavingChallenge(true);
-    await saveTextData(currentWedChallengeKey, wedDraft);
-    setWedChallengeText(wedDraft);
-    setSavingChallenge(false);
   };
 
   const rows = useMemo(() => {
@@ -882,7 +862,6 @@ function SupervisorDashboard({ onExit, supervisor }) {
   });
 
   const optionObj = supervisorAvailableDays.find(d => d.idx === selectedOptionIdx);
-  const actualDayIdx = optionObj ? optionObj.realDayIdx : 0;
   const isRestDay = !optionObj;
 
   return (
@@ -896,26 +875,6 @@ function SupervisorDashboard({ onExit, supervisor }) {
       />
 
       <GroupRace coralPercent={groupAverages.coral} pearlPercent={groupAverages.pearl} />
-
-      {!isRestDay && actualDayIdx === 3 && (
-        <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe', marginBottom: '16px' }}>
-          <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '13px', margin: '0 0 8px 0' }}>✍️ كتابة تحدي الأربعاء</h3>
-          <textarea
-            value={wedDraft}
-            onChange={(e) => setWedDraft(e.target.value)}
-            placeholder="اكتبي تحدي الأربعاء هنا..."
-            rows={2}
-            style={{ width: '100%', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '8px', fontSize: '12px', resize: 'none', boxSizing: 'border-box' }}
-          />
-          <button
-            onClick={saveWedChallenge}
-            disabled={savingChallenge}
-            style={{ width: '100%', backgroundColor: '#0f766e', color: '#ffffff', border: 'none', padding: '8px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer' }}
-          >
-            {savingChallenge ? 'جارِ الحفظ...' : 'حفظ تحدي الأربعاء'}
-          </button>
-        </div>
-      )}
 
       <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe', marginBottom: '16px' }}>
         <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '13px', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
