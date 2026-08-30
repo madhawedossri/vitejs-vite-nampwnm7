@@ -1,0 +1,15 @@
+{
+  "name": "ارتقاء - غراس اللؤلؤ",
+  "short_name": "ارتقاء",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#eafcff",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "https://emojicdn.elk.sh/🦪?style=facebook",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
