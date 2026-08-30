@@ -56,7 +56,7 @@ const SUPERVISORS = [
 const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
 /* ---------------------------------------------------------------
-   حساب موعد التجدد (الساعة 4:30 عصراً) وإدارة الأسابيع الأربعة
+   حساب موعد التجدد (الساعة 4:30 عصراً)
 --------------------------------------------------------------- */
 const CUTOFF_HOUR = 16;
 const CUTOFF_MIN = 30;
@@ -68,7 +68,6 @@ function useCycleClock() {
     return () => clearInterval(t);
   }, []);
 
-  // حساب بداية ونهاية دورة اليوم عند الساعة 4:30 عصراً
   const cycleStart = new Date(now);
   cycleStart.setHours(CUTOFF_HOUR, CUTOFF_MIN, 0, 0);
   if (now.getTime() < cycleStart.getTime()) {
@@ -78,11 +77,9 @@ function useCycleClock() {
   const cycleEnd = new Date(cycleStart);
   cycleEnd.setDate(cycleEnd.getDate() + 1);
 
-  const dayIndex = cycleStart.getDay(); // 0 = الأحد, 1 = الاثنين...
+  const dayIndex = cycleStart.getDay();
   const dateKey = cycleStart.toISOString().slice(0, 10);
-
-  // حساب الأسبوع الحالي (من 1 إلى 4)
-  const currentWeekNum = 1; 
+  const currentWeekNum = 1;
 
   const formattedDate = cycleStart.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -92,27 +89,22 @@ function useCycleClock() {
     dateKey,
     currentWeekNum,
     formattedDate,
-    dailyKeyForDate: (dKey) => `wird-daily_${dKey}`,
+    dailyKey: `wird-daily_${dateKey}`,
     weeklyKey: `wird-weekly_week${currentWeekNum}`,
     challengeKey: `wed-challenge_week${currentWeekNum}`,
     msRemaining: cycleEnd.getTime() - now.getTime(),
   };
 }
 
-/* ---------------------------------------------------------------
-   بناء بنود الورد وتوليد الوصف المخصص
---------------------------------------------------------------- */
 function getVisibleItems(displayIdx, tier, wedChallengeText) {
   const items = [];
-  
-  // البنود اليومية الأساسية
+
   if ([0, 1, 2, 6].includes(displayIdx)) {
     items.push({ id: 'listen', label: 'سماع المقرر', desc: 'سماع النصاب 3 مرات من الشيخ.', emoji: '🎧', weekly: false });
     items.push({ id: 'recite', label: 'السرد مع رفيقة', desc: 'سرده مرتين بدون خطأ أو تنبيه أو لحن.', emoji: '🪸', weekly: false });
     items.push({ id: 'repeat', label: 'التكرار الذاتي', desc: 'التكرار 7 مرات (تسجيل صوتي أو بالورقة).', emoji: '🫧', weekly: false });
     items.push({ id: 'tafsir', label: 'التفسير', desc: 'قراءة تفسير النصاب.', emoji: '📖', weekly: false });
-    
-    // بند مراجعة السابق مع التوصيف المخصص للأحد والاثنين والثلاثاء
+
     let reviewDesc = 'مراجعة الورد السابق';
     if (displayIdx === 0) reviewDesc = 'مراجعة مقرر السبت مرتين ذاتياً';
     else if (displayIdx === 1) reviewDesc = 'مراجعة مقرر السبت والاثنين مرتين ذاتياً';
@@ -121,17 +113,14 @@ function getVisibleItems(displayIdx, tier, wedChallengeText) {
     items.push({ id: 'review', label: 'مراجعة السابق', desc: reviewDesc, emoji: '🐬', weekly: false });
   }
 
-  // بند المراجعة الكبرى للدفعة الثانية والدورة الثالثة فقط
   if ((tier === 'second' || tier === 'third') && [0, 1, 2, 3, 6].includes(displayIdx)) {
     items.push({ id: 'majorReview', label: 'المراجعة الكبرى', desc: 'خاص بطالبات الدفعة الثانية والدورة الثالثة', emoji: '⭐️', weekly: false });
   }
 
-  // بند المراجعة التراكمية للدورة الثالثة
   if (tier === 'third' && [0, 1, 2, 3, 4, 6].includes(displayIdx)) {
     items.push({ id: 'cumulativeReview', label: 'المراجعة التراكمية', desc: 'خاص بطالبات الدورة الثالثة — تُنجز مرة واحدة في الأسبوع', emoji: '⛓️✨', weekly: true });
   }
 
-  // تحدي الأربعاء
   if (displayIdx === 3) {
     items.push({
       id: 'wedChallenge',
@@ -305,9 +294,6 @@ function CelebrationModal({ onClose }) {
   );
 }
 
-/* ---------------------------------------------------------------
-   الشريط العلوي الموزون المنسدل لليوم
---------------------------------------------------------------- */
 function TopBar({ onExit, title, formattedDate, countdownMs, selectedDayIdx, setSelectedDayIdx, availableDays, weekNum, showDropdown = true }) {
   return (
     <div style={{ width: '100%', marginBottom: '16px' }}>
@@ -395,7 +381,7 @@ function RoleSelect({ onSelect }) {
 
 function StudentFlow({ onExit }) {
   const clock = useCycleClock();
-  const [pins, setPins] = useState(null);
+  const [pins, setPins] = useState({});
   const [pendingStudent, setPendingStudent] = useState(null);
   const [student, setStudent] = useState(null);
   const [pinInput, setPinInput] = useState('');
@@ -408,7 +394,7 @@ function StudentFlow({ onExit }) {
 
   const [selectedDayIdx, setSelectedDayIdx] = useState(clock.dayIndex);
 
-  useEffect(() => { loadJSON(PINS_KEY).then(setPins); }, []);
+  useEffect(() => { loadJSON(PINS_KEY).then((data) => setPins(data || {})); }, []);
 
   useEffect(() => {
     const savedStudentId = localStorage.getItem('saved_student_id');
@@ -418,9 +404,8 @@ function StudentFlow({ onExit }) {
     }
   }, []);
 
-  // حساب الأيام المتاحة فقط داخل الأسبوع الحالي لمنع التشتت
   const availableDays = useMemo(() => {
-    const weekOrder = [6, 0, 1, 2, 3, 4, 5]; 
+    const weekOrder = [6, 0, 1, 2, 3, 4, 5];
     const currentOrderPos = weekOrder.indexOf(clock.dayIndex);
     const result = [];
     for (let i = 0; i <= currentOrderPos; i++) {
@@ -433,9 +418,7 @@ function StudentFlow({ onExit }) {
   useEffect(() => {
     if (!student) return;
 
-    const currentDailyKey = clock.dailyKeyForDate(clock.dateKey);
-
-    const unsubDaily = onSnapshot(doc(db, 'wird', currentDailyKey), (snap) => {
+    const unsubDaily = onSnapshot(doc(db, 'wird', clock.dailyKey), (snap) => {
       if (snap.exists() && snap.data().value) setDaily(JSON.parse(snap.data().value));
       else setDaily({});
     });
@@ -451,7 +434,7 @@ function StudentFlow({ onExit }) {
     });
 
     return () => { unsubDaily(); unsubWeekly(); unsubChallenge(); };
-  }, [student, clock]);
+  }, [student, clock.dailyKey, clock.weeklyKey, clock.challengeKey]);
 
   const submitPin = async () => {
     if (!pendingStudent || !pins) return;
@@ -514,7 +497,7 @@ function StudentFlow({ onExit }) {
         }
       };
       setDaily(updatedDaily);
-      await saveJSON(clock.dailyKeyForDate(clock.dateKey), updatedDaily);
+      await saveJSON(clock.dailyKey, updatedDaily);
       if (newPercent === 100 && current.completedAt == null) setShowCelebration(true);
     }
   };
@@ -590,7 +573,6 @@ function StudentFlow({ onExit }) {
   const teammates = STUDENTS.filter((s) => s.group === student.group);
   const g = GROUPS[student.group];
 
-  // ترتيب صيد اللؤلؤ ليرتقي المكتملات للأعلى مع أوسمة المراكز
   const sortedTeammates = [...teammates].map((t) => {
     const tItems = getVisibleItems(selectedDayIdx, t.tier, challengeText);
     const tPercent = percentFor(tItems, daily[t.id], weekly[t.id]);
@@ -732,9 +714,6 @@ function SupervisorFlow({ onExit }) {
   return <SupervisorDashboard onExit={onExit} supervisor={chosen} />;
 }
 
-/* ---------------------------------------------------------------
-   لوحة المشرفات المتزامنة للحفظ الفوري والميداليات
---------------------------------------------------------------- */
 function SupervisorDashboard({ onExit, supervisor }) {
   const clock = useCycleClock();
   const [daily, setDaily] = useState({});
@@ -759,7 +738,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
   }, [clock.dayIndex]);
 
   useEffect(() => {
-    const unsubDaily = onSnapshot(doc(db, 'wird', clock.dailyKeyForDate(clock.dateKey)), (snap) => {
+    const unsubDaily = onSnapshot(doc(db, 'wird', clock.dailyKey), (snap) => {
       if (snap.exists() && snap.data().value) setDaily(JSON.parse(snap.data().value));
       else setDaily({});
     });
@@ -777,10 +756,10 @@ function SupervisorDashboard({ onExit, supervisor }) {
       }
     });
 
-    loadJSON(PINS_KEY).then(setPins);
+    loadJSON(PINS_KEY).then((data) => setPins(data || {}));
 
     return () => { unsubDaily(); unsubWeekly(); unsubChallenge(); };
-  }, [clock]);
+  }, [clock.dailyKey, clock.weeklyKey, clock.challengeKey]);
 
   const resetPin = async (studentId) => {
     const updated = { ...pins };
@@ -924,7 +903,141 @@ function SupervisorDashboard({ onExit, supervisor }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <PearlBar percent={r.percent} count={5} />
                   <span style={{ fontSize: '11px', color: '#64748b', width: '28px' }}>{r.percent}%</span>
-                  {pins[r.id] && (
+                  {pins?.[r.id] && (
+                    <button onClick={() => resetPin(r.id)} style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer', padding: 0 }}>
+                      <Lock size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  const [role, setRole] = useState(null);
+
+  return (
+    <div dir="rtl" style={{ minHeight: '100vh', backgroundColor: '#eafcff', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '16px', fontFamily: 'Cairo, sans-serif' }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');`}</style>
+      <div style={{ width: '100%', maxWidth: '380px', minHeight: '600px', backgroundColor: '#f8fafc', borderRadius: '32px', padding: '20px', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', border: '4px solid #ffffff' }}>
+        {role === null && <RoleSelect onSelect={setRole} />}
+        {role === 'student' && <StudentFlow onExit={() => setRole(null)} />}
+        {role === 'supervisor' && <SupervisorFlow onExit={() => setRole(null)} />}
+      </div>
+    </div>
+  );
+}<button onClick={() => resetPin(r.id)} style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer', padding: 0 }}>
+                        <Lock size={12} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <TopBar
+        onExit={onExit}
+        title={`أهلاً ${supervisor.name} 🪸`}
+        formattedDate={clock.formattedDate}
+        countdownMs={clock.msRemaining}
+        selectedDayIdx={selectedDayIdx}
+        setSelectedDayIdx={setSelectedDayIdx}
+        availableDays={availableDays}
+        weekNum={clock.currentWeekNum}
+      />
+
+      <GroupRace coralPercent={groupAverages.coral} pearlPercent={groupAverages.pearl} selectedDayIdx={selectedDayIdx} />
+
+      <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe', marginBottom: '16px' }}>
+        <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '13px', margin: '0 0 8px 0' }}>✍️ كتابة تحدي الأربعاء الأسبوعي</h3>
+        <textarea
+          value={challengeDraft}
+          onChange={(e) => setChallengeDraft(e.target.value)}
+          placeholder="اكتبي التحدي هنا في أي وقت وسوف يظهر للطالبات يوم الأربعاء..."
+          rows={2}
+          style={{ width: '100%', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '8px', fontSize: '12px', resize: 'none', boxSizing: 'border-box' }}
+        />
+        <button
+          onClick={saveChallenge}
+          disabled={savingChallenge}
+          style={{ width: '100%', backgroundColor: '#0f766e', color: '#ffffff', border: 'none', padding: '8px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold', marginTop: '6px', cursor: 'pointer' }}
+        >
+          {savingChallenge ? 'جارِ الحفظ...' : 'حفظ التحدي'}
+        </button>
+      </div>
+
+      <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe', marginBottom: '16px' }}>
+        <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '13px', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <Trophy size={16} color="#f59e0b" /> الأوائل المكتملات اليوم
+        </h3>
+        {leaderboard.length === 0 ? (
+          <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'center', padding: '8px 0' }}>لم تُكمل أي طالبة الورد بعد اليوم 🐚</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {leaderboard.map((r, i) => (
+              <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f0fdfa', borderRadius: '10px', padding: '6px 10px', fontSize: '12px' }}>
+                <span>{['🥇', '🥈', '🥉'][i]} {r.name}</span>
+                <span style={{ color: '#16a34a', fontWeight: 'bold' }}>اكتمل ✓</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe' }}>
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '10px' }}>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="ابحثي عن طالبة..."
+            style={{ flex: 1, border: '1px solid #cbd5e1', borderRadius: '10px', padding: '6px 10px', fontSize: '11px' }}
+          />
+          <select
+            value={groupFilter}
+            onChange={(e) => setGroupFilter(e.target.value)}
+            style={{ border: '1px solid #cbd5e1', borderRadius: '10px', padding: '6px', fontSize: '11px', backgroundColor: '#fff', fontWeight: 'bold' }}
+          >
+            <option value="all">كل الطالبات</option>
+            <option value="coral">🪸 المرجان</option>
+            <option value="pearl">🦪 اللؤلؤ</option>
+            <option value="third">⛓️✨ التراكمية</option>
+          </select>
+        </div>
+
+        <div style={{ maxHeight: '280px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {filteredRows.map((r) => {
+            const isDone = r.percent === 100;
+            const rankIndex = leaderboard.findIndex(l => l.id === r.id);
+            let medalBadge = null;
+            if (isDone) {
+              if (rankIndex === 0) medalBadge = '🥇 الأولى';
+              else if (rankIndex === 1) medalBadge = '🥈 الثانية';
+              else if (rankIndex === 2) medalBadge = '🥉 الثالثة';
+              else medalBadge = 'منجزة ✓';
+            }
+
+            return (
+              <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '6px' }}>
+                <span style={{ fontSize: '12px', color: isDone ? '#15803d' : '#334155', fontWeight: isDone ? 'bold' : 'normal' }}>
+                  {GROUPS[r.group].emoji} {r.name}
+                  {medalBadge && <span style={{ fontSize: '10px', backgroundColor: '#dcfce7', color: '#166534', borderRadius: '8px', padding: '2px 6px', marginRight: '6px' }}>{medalBadge}</span>}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <PearlBar percent={r.percent} count={5} />
+                  <span style={{ fontSize: '11px', color: '#64748b', width: '28px' }}>{r.percent}%</span>
+                  {pins?.[r.id] && (
                     <button onClick={() => resetPin(r.id)} style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer', padding: 0 }}>
                       <Lock size={12} />
                     </button>
