@@ -65,8 +65,11 @@ const SUPERVISORS = [
 
 const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
+// ترتيب الأيام في الحلقة ليبدأ الأسبوع من السبت وينتهي الجمعة
+const WEEK_ORDER = [6, 0, 1, 2, 3, 4, 5]; // السبت(6)، الأحد(0)، الاثنين(1)...
+
 /* ---------------------------------------------------------------
-   حساب موعد التجدد وتوقيت السعودية الثابت (الساعة 4:30 عصراً)
+   حساب التوقيت والأسابيع (4 أسابيع تبدأ من السبت الماضي للتجربة)
 --------------------------------------------------------------- */
 const CUTOFF_HOUR = 16;
 const CUTOFF_MIN = 30;
@@ -81,6 +84,7 @@ function useCycleClock() {
   const ksaNowString = now.toLocaleString('en-US', { timeZone: 'Asia/Riyadh', hour12: false });
   const ksaNow = new Date(ksaNowString);
 
+  // حساب وقت تجدد الورد (4:30 عصراً)
   const cycleStart = new Date(ksaNow);
   cycleStart.setHours(CUTOFF_HOUR, CUTOFF_MIN, 0, 0);
   if (ksaNow.getTime() < cycleStart.getTime()) {
@@ -90,17 +94,13 @@ function useCycleClock() {
   const cycleEnd = new Date(cycleStart);
   cycleEnd.setDate(cycleEnd.getDate() + 1);
 
-  const dayIndex = cycleStart.getDay();
+  const realDayIndex = cycleStart.getDay();
   const formattedDate = cycleStart.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', timeZone: 'Asia/Riyadh' });
 
   return {
     now,
-    dayIndex,
-    currentWeekNum: 1,
+    realDayIndex,
     formattedDate,
-    dailyKey: `wird-daily_day_${dayIndex}`,
-    weeklyKey: `wird-weekly_week1`,
-    challengeKey: `wed-challenge_week1`,
     msRemaining: cycleEnd.getTime() - now.getTime(),
   };
 }
@@ -117,30 +117,33 @@ function formatDuration(ms) {
 
 function getVisibleItems(displayIdx, tier, wedChallengeText) {
   const items = [];
+  // تحويل مؤشر العرض الحقيقي إلى نوع اليوم بناءً على ترتيب الحلقة
+  const actualDayIdx = WEEK_ORDER[displayIdx];
 
-  if ([0, 1, 2, 6].includes(displayIdx)) {
+  if ([0, 1, 2, 6].includes(actualDayIdx)) {
     items.push({ id: 'listen', label: 'سماع المقرر', desc: 'سماع النصاب 3 مرات من الشيخ.', emoji: '🎧', weekly: false });
     items.push({ id: 'recite', label: 'السرد مع رفيقة', desc: 'سرده مرتين بدون خطأ أو تنبيه أو لحن.', emoji: '🪸', weekly: false });
     items.push({ id: 'repeat', label: 'التكرار الذاتي', desc: 'التكرار 7 مرات (تسجيل صوتي أو بالورقة).', emoji: '🫧', weekly: false });
     items.push({ id: 'tafsir', label: 'التفسير', desc: 'قراءة تفسير النصاب.', emoji: '📖', weekly: false });
 
     let reviewDesc = 'مراجعة الورد السابق';
-    if (displayIdx === 0) reviewDesc = 'مراجعة مقرر السبت مرتين ذاتياً';
-    else if (displayIdx === 1) reviewDesc = 'مراجعة مقرر السبت والاثنين مرتين ذاتياً';
-    else if (displayIdx === 2) reviewDesc = 'مراجعة مقرر السبت والاثنين والثلاثاء مرتين ذاتياً';
+    if (actualDayIdx === 6) reviewDesc = 'مراجعة مقرر السبت مرتين ذاتياً';
+    else if (actualDayIdx === 0) reviewDesc = 'مراجعة مقرر السبت والأحد مرتين ذاتياً';
+    else if (actualDayIdx === 1) reviewDesc = 'مراجعة مقرر السبت والاثنين مرتين ذاتياً';
 
     items.push({ id: 'review', label: 'مراجعة السابق', desc: reviewDesc, emoji: '🐬', weekly: false });
   }
 
-  if ((tier === 'second' || tier === 'third') && [0, 1, 2, 3, 6].includes(displayIdx)) {
+  if ((tier === 'second' || tier === 'third') && [6, 0, 1, 2, 3].includes(actualDayIdx)) {
     items.push({ id: 'majorReview', label: 'المراجعة الكبرى', desc: 'خاص بطالبات الدفعة الثانية والدورة الثالثة', emoji: '⭐️', weekly: false });
   }
 
-  if (tier === 'third' && [0, 1, 2, 3, 4, 6].includes(displayIdx)) {
+  if (tier === 'third' && [6, 0, 1, 2, 3, 4].includes(actualDayIdx)) {
     items.push({ id: 'cumulativeReview', label: 'المراجعة التراكمية', desc: 'خاص بطالبات الدورة الثالثة — تُنجز مرة واحدة في الأسبوع', emoji: '⛓️✨', weekly: true });
   }
 
-  if (displayIdx === 3) {
+  // يوم الأربعاء (actualDayIdx === 3)
+  if (actualDayIdx === 3) {
     items.push({
       id: 'wedChallenge',
       label: 'تحدي الأربعاء',
@@ -164,10 +167,11 @@ function percentFor(items, dailySaved, weeklySaved) {
   return Math.round((done / items.length) * 100);
 }
 
-function computeGroupAverages(dayIndex, wedChallengeText, daily, weekly) {
+function computeGroupAverages(selectedOptionIdx, wedChallengeText, daily, weekly) {
   const sums = { coral: [], pearl: [] };
+  const actualDayIdx = WEEK_ORDER[selectedOptionIdx % 7];
   STUDENTS.forEach((s) => {
-    const items = getVisibleItems(dayIndex, s.tier, wedChallengeText);
+    const items = getVisibleItems(selectedOptionIdx, s.tier, wedChallengeText);
     const percent = percentFor(items, daily?.[s.id], weekly?.[s.id]);
     sums[s.group].push(percent);
   });
@@ -237,8 +241,9 @@ function RaceLane({ emoji, percent, trackTint }) {
   );
 }
 
-function GroupRace({ coralPercent, pearlPercent, selectedDayIdx }) {
-  if (selectedDayIdx === 5) {
+function GroupRace({ coralPercent, pearlPercent, selectedOptionIdx }) {
+  const actualDayIdx = WEEK_ORDER[selectedOptionIdx % 7];
+  if (actualDayIdx === 5) {
     return (
       <div style={{ backgroundColor: '#f0fdf4', borderRadius: '20px', padding: '16px', border: '1px solid #bbf7d0', marginBottom: '16px', textAlign: 'center' }}>
         <div style={{ fontSize: '28px', marginBottom: '4px' }}>🌸✨</div>
@@ -313,7 +318,9 @@ function CelebrationModal({ onClose }) {
   );
 }
 
-function TopBar({ onExit, title, formattedDate, countdownMs, selectedDayIdx, setSelectedDayIdx, availableDays, showDropdown = true }) {
+function TopBar({ onExit, title, formattedDate, countdownMs, selectedOptionIdx, setSelectedOptionIdx, availableDays, showDropdown = true }) {
+  const currentOption = availableDays.find(d => d.idx === selectedOptionIdx) || availableDays[0];
+
   return (
     <div style={{ width: '100%', marginBottom: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -326,18 +333,18 @@ function TopBar({ onExit, title, formattedDate, countdownMs, selectedDayIdx, set
           <div style={{ fontSize: '18px', fontWeight: '800', color: '#0f766e' }}>{title}</div>
           
           {showDropdown && availableDays && (
-            <div style={{ position: 'relative', display: 'inline-block', marginTop: '4px' }}>
+            <div style={{ position: 'relative', display: 'inline-block', marginTop: '6px' }}>
               <select
-                value={selectedDayIdx}
-                onChange={(e) => setSelectedDayIdx(Number(e.target.value))}
+                value={selectedOptionIdx}
+                onChange={(e) => setSelectedOptionIdx(Number(e.target.value))}
                 style={{
                   appearance: 'none',
                   backgroundColor: '#ccfbf1',
                   color: '#0f766e',
                   border: '1px solid #99f6e4',
                   borderRadius: '12px',
-                  padding: '4px 28px 4px 12px',
-                  fontSize: '12px',
+                  padding: '6px 32px 6px 14px',
+                  fontSize: '13px',
                   fontWeight: '800',
                   cursor: 'pointer',
                   textAlign: 'center'
@@ -349,7 +356,7 @@ function TopBar({ onExit, title, formattedDate, countdownMs, selectedDayIdx, set
                   </option>
                 ))}
               </select>
-              <ChevronDown size={14} color="#0f766e" style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+              <ChevronDown size={14} color="#0f766e" style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
             </div>
           )}
 
@@ -359,9 +366,9 @@ function TopBar({ onExit, title, formattedDate, countdownMs, selectedDayIdx, set
       </div>
 
       {typeof countdownMs === 'number' && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '10px', fontSize: '11px', color: '#0f766e', backgroundColor: '#f0fdfa', border: '1px solid #ccfbf1', borderRadius: '20px', padding: '6px 12px', width: 'fit-content', margin: '10px auto 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '10px', fontSize: '11px', color: '#0f766e', backgroundColor: '#f0fdfa', border: '1px solid #ccfbf1', borderRadius: '20px', padding: '6px 14px', width: 'fit-content', margin: '10px auto 0' }}>
           <span>المتبقي لنهاية الوقت:</span>
-          <span style={{ fontWeight: 'bold' }}>{formatDuration(countdownMs)}</span>
+          <span style={{ fontWeight: 'bold', color: '#0d9488', fontFamily: 'monospace', fontSize: '12px' }}>{formatDuration(countdownMs)}</span>
         </div>
       )}
     </div>
@@ -413,7 +420,27 @@ function StudentFlow({ onExit }) {
   const [wedChallengeText, setWedChallengeText] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
 
-  const [selectedDayIdx, setSelectedDayIdx] = useState(clock.dayIndex);
+  // توليد الأسابيع الأربعة (من الأسبوع 1 إلى 4)
+  const availableDays = useMemo(() => {
+    const list = [];
+    const weekNames = ['الأول', 'الثاني', 'الثالث', 'الرابع'];
+    for (let w = 1; w <= 4; w++) {
+      WEEK_ORDER.forEach((realDayIdx, i) => {
+        const optionIdx = (w - 1) * 7 + i;
+        const dayLabel = DAY_NAMES[realDayIdx];
+        list.push({
+          idx: optionIdx,
+          weekNum: w,
+          realDayIdx: realDayIdx,
+          name: `${dayLabel} ${w}/4`
+        });
+      });
+    }
+    return list;
+  }, []);
+
+  // البدء افتراضياً بيوم السبت الأول (مؤشر 0)
+  const [selectedOptionIdx, setSelectedOptionIdx] = useState(0);
 
   useEffect(() => { loadJSON(PINS_KEY).then((data) => setPins(data || {})); }, []);
 
@@ -425,31 +452,25 @@ function StudentFlow({ onExit }) {
     }
   }, []);
 
-  const availableDays = useMemo(() => {
-    const weekOrder = [6, 0, 1, 2, 3, 4, 5];
-    const currentOrderPos = weekOrder.indexOf(clock.dayIndex);
-    const result = [];
-    for (let i = 0; i <= currentOrderPos; i++) {
-      const idx = weekOrder[i];
-      result.push({ idx, name: DAY_NAMES[idx] });
-    }
-    return result;
-  }, [clock.dayIndex]);
+  // مفتاح تخزين مستقل لكل يوم في كل أسبوع لضمان عدم اللخبطة نهائياً
+  const currentDailyKey = `wird-daily_option_${selectedOptionIdx}`;
+  const currentWeeklyKey = `wird-weekly_week_1`;
+  const currentChallengeKey = `wed-challenge_week_${Math.floor(selectedOptionIdx / 7) + 1}`;
 
   useEffect(() => {
     if (!student) return;
 
-    const unsubDaily = onSnapshot(doc(db, 'wird', clock.dailyKey), (snap) => {
+    const unsubDaily = onSnapshot(doc(db, 'wird', currentDailyKey), (snap) => {
       if (snap.exists() && snap.data().value) setDaily(JSON.parse(snap.data().value));
       else setDaily({});
     });
 
-    const unsubWeekly = onSnapshot(doc(db, 'wird', clock.weeklyKey), (snap) => {
+    const unsubWeekly = onSnapshot(doc(db, 'wird', currentWeeklyKey), (snap) => {
       if (snap.exists() && snap.data().value) setWeekly(JSON.parse(snap.data().value));
       else setWeekly({});
     });
 
-    const unsubChallenge = onSnapshot(doc(db, 'wird', clock.challengeKey), (snap) => {
+    const unsubChallenge = onSnapshot(doc(db, 'wird', currentChallengeKey), (snap) => {
       if (snap.exists() && snap.data().value) {
         setWedChallengeText(snap.data().value);
       } else {
@@ -458,7 +479,7 @@ function StudentFlow({ onExit }) {
     });
 
     return () => { unsubDaily(); unsubWeekly(); unsubChallenge(); };
-  }, [student, clock.dailyKey, clock.weeklyKey, clock.challengeKey]);
+  }, [student, currentDailyKey, currentWeeklyKey, currentChallengeKey]);
 
   const submitPin = async () => {
     if (!pendingStudent || !pins) return;
@@ -487,11 +508,11 @@ function StudentFlow({ onExit }) {
     }
   };
 
-  const items = student ? getVisibleItems(selectedDayIdx, student.tier, wedChallengeText) : [];
+  const items = student ? getVisibleItems(selectedOptionIdx, student.tier, wedChallengeText) : [];
   const myDaily = student ? daily?.[student.id] : null;
   const myWeekly = student ? weekly?.[student.id] : null;
   const percent = useMemo(() => percentFor(items, myDaily, myWeekly), [items, myDaily, myWeekly]);
-  const groupAverages = useMemo(() => computeGroupAverages(selectedDayIdx, wedChallengeText, daily, weekly), [selectedDayIdx, wedChallengeText, daily, weekly]);
+  const groupAverages = useMemo(() => computeGroupAverages(selectedOptionIdx, wedChallengeText, daily, weekly), [selectedOptionIdx, wedChallengeText, daily, weekly]);
 
   const toggleItem = async (item) => {
     if (!student) return;
@@ -507,7 +528,7 @@ function StudentFlow({ onExit }) {
         }
       };
       setWeekly(updatedWeekly);
-      await saveJSON(clock.weeklyKey, updatedWeekly);
+      await saveJSON(currentWeeklyKey, updatedWeekly);
       if (percentFor(items, myDaily, updatedWeekly[student.id]) === 100) setShowCelebration(true);
     } else {
       const current = daily[student.id] || { items: {}, completedAt: null };
@@ -521,7 +542,7 @@ function StudentFlow({ onExit }) {
         }
       };
       setDaily(updatedDaily);
-      await saveJSON(clock.dailyKey, updatedDaily);
+      await saveJSON(currentDailyKey, updatedDaily);
       if (newPercent === 100 && current.completedAt == null) setShowCelebration(true);
     }
   };
@@ -591,7 +612,7 @@ function StudentFlow({ onExit }) {
   const g = GROUPS[student.group];
 
   const sortedTeammates = [...teammates].map((t) => {
-    const tItems = getVisibleItems(selectedDayIdx, t.tier, wedChallengeText);
+    const tItems = getVisibleItems(selectedOptionIdx, t.tier, wedChallengeText);
     const tPercent = percentFor(tItems, daily[t.id], weekly[t.id]);
     const completedAt = daily[t.id]?.completedAt || null;
     return { ...t, tPercent, completedAt };
@@ -605,29 +626,30 @@ function StudentFlow({ onExit }) {
   });
 
   const completedTeammatesList = sortedTeammates.filter(t => t.tPercent === 100);
+  const currentOptionObj = availableDays.find(d => d.idx === selectedOptionIdx) || availableDays[0];
 
   return (
     <div>
       {showCelebration && <CelebrationModal onClose={() => setShowCelebration(false)} />}
       <TopBar
-        onExit={onExit}
+        onExit={null}
         title={`أهلاً، ${student.name} ${g.emoji}`}
         formattedDate={clock.formattedDate}
         countdownMs={clock.msRemaining}
-        selectedDayIdx={selectedDayIdx}
-        setSelectedDayIdx={setSelectedDayIdx}
+        selectedOptionIdx={selectedOptionIdx}
+        setSelectedOptionIdx={setSelectedOptionIdx}
         availableDays={availableDays}
       />
 
       <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <span style={{ fontWeight: '800', color: '#0f766e', fontSize: '14px' }}>ورد يوم {DAY_NAMES[selectedDayIdx]}</span>
+          <span style={{ fontWeight: '800', color: '#0f766e', fontSize: '14px' }}>ورد يوم {currentOptionObj.name}</span>
           <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 'bold' }}>{percent}%</span>
         </div>
         <PearlBar percent={percent} big />
       </div>
 
-      <GroupRace coralPercent={groupAverages.coral} pearlPercent={groupAverages.pearl} selectedDayIdx={selectedDayIdx} />
+      <GroupRace coralPercent={groupAverages.coral} pearlPercent={groupAverages.pearl} selectedOptionIdx={selectedOptionIdx} />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
         {items.map((it) => {
@@ -771,30 +793,40 @@ function SupervisorDashboard({ onExit, supervisor }) {
   const [savingChallenge, setSavingChallenge] = useState(false);
   const [groupFilter, setGroupFilter] = useState('all');
   const [search, setSearch] = useState('');
-  const [selectedDayIdx, setSelectedDayIdx] = useState(clock.dayIndex);
+  const [selectedOptionIdx, setSelectedOptionIdx] = useState(0);
 
-  const supervisorAvailableDays = [
-    { idx: 6, name: 'السبت' },
-    { idx: 0, name: 'الأحد' },
-    { idx: 1, name: 'الاثنين' },
-    { idx: 2, name: 'الثلاثاء' },
-    { idx: 3, name: 'الأربعاء' },
-    { idx: 4, name: 'الخميس' },
-    { idx: 5, name: 'الجمعة' },
-  ];
+  // إعداد قائمة الأيام للمشرفة لتستعرض وتتابع جميع الأسابيع الأربعة (من السبت 1/4 إلى الجمعة 4/4)
+  const supervisorAvailableDays = useMemo(() => {
+    const list = [];
+    for (let w = 1; w <= 4; w++) {
+      WEEK_ORDER.forEach((realDayIdx, i) => {
+        const optionIdx = (w - 1) * 7 + i;
+        const dayLabel = DAY_NAMES[realDayIdx];
+        list.push({
+          idx: optionIdx,
+          name: `${dayLabel} ${w}/4`
+        });
+      });
+    }
+    return list;
+  }, []);
+
+  const currentDailyKey = `wird-daily_option_${selectedOptionIdx}`;
+  const currentWeeklyKey = `wird-weekly_week_1`;
+  const currentChallengeKey = `wed-challenge_week_${Math.floor(selectedOptionIdx / 7) + 1}`;
 
   useEffect(() => {
-    const unsubDaily = onSnapshot(doc(db, 'wird', clock.dailyKey), (snap) => {
+    const unsubDaily = onSnapshot(doc(db, 'wird', currentDailyKey), (snap) => {
       if (snap.exists() && snap.data().value) setDaily(JSON.parse(snap.data().value));
       else setDaily({});
     });
 
-    const unsubWeekly = onSnapshot(doc(db, 'wird', clock.weeklyKey), (snap) => {
+    const unsubWeekly = onSnapshot(doc(db, 'wird', currentWeeklyKey), (snap) => {
       if (snap.exists() && snap.data().value) setWeekly(JSON.parse(snap.data().value));
       else setWeekly({});
     });
 
-    const unsubChallenge = onSnapshot(doc(db, 'wird', clock.challengeKey), (snap) => {
+    const unsubChallenge = onSnapshot(doc(db, 'wird', currentChallengeKey), (snap) => {
       if (snap.exists() && snap.data().value) {
         setWedChallengeText(snap.data().value);
         setChallengeDraft(snap.data().value);
@@ -807,7 +839,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
     loadJSON(PINS_KEY).then((data) => setPins(data || {}));
 
     return () => { unsubDaily(); unsubWeekly(); unsubChallenge(); };
-  }, [clock.dailyKey, clock.weeklyKey, clock.challengeKey]);
+  }, [currentDailyKey, currentWeeklyKey, currentChallengeKey]);
 
   const resetPin = async (studentId) => {
     const updated = { ...pins };
@@ -818,21 +850,21 @@ function SupervisorDashboard({ onExit, supervisor }) {
 
   const saveWedChallenge = async () => {
     setSavingChallenge(true);
-    await saveChallengeText(clock.challengeKey, challengeDraft);
+    await saveChallengeText(currentChallengeKey, challengeDraft);
     setWedChallengeText(challengeDraft);
     setSavingChallenge(false);
   };
 
   const rows = useMemo(() => {
     return STUDENTS.map((s) => {
-      const items = getVisibleItems(selectedDayIdx, s.tier, wedChallengeText);
+      const items = getVisibleItems(selectedOptionIdx, s.tier, wedChallengeText);
       const percent = percentFor(items, daily[s.id], weekly[s.id]);
       const hasCumulative = !!weekly[s.id]?.cumulativeReview?.completed;
       return { ...s, percent, hasCumulative, completedAt: daily[s.id]?.completedAt || null };
     });
-  }, [daily, weekly, selectedDayIdx, wedChallengeText]);
+  }, [daily, weekly, selectedOptionIdx, wedChallengeText]);
 
-  const groupAverages = useMemo(() => computeGroupAverages(selectedDayIdx, wedChallengeText, daily, weekly), [selectedDayIdx, wedChallengeText, daily, weekly]);
+  const groupAverages = useMemo(() => computeGroupAverages(selectedOptionIdx, wedChallengeText, daily, weekly), [selectedOptionIdx, wedChallengeText, daily, weekly]);
 
   const leaderboard = useMemo(() => {
     return rows
@@ -867,19 +899,19 @@ function SupervisorDashboard({ onExit, supervisor }) {
         title={`أهلاً ${supervisor.name} 🪸`}
         formattedDate={clock.formattedDate}
         countdownMs={clock.msRemaining}
-        selectedDayIdx={selectedDayIdx}
-        setSelectedDayIdx={setSelectedDayIdx}
+        selectedOptionIdx={selectedOptionIdx}
+        setSelectedOptionIdx={setSelectedOptionIdx}
         availableDays={supervisorAvailableDays}
       />
 
-      <GroupRace coralPercent={groupAverages.coral} pearlPercent={groupAverages.pearl} selectedDayIdx={selectedDayIdx} />
+      <GroupRace coralPercent={groupAverages.coral} pearlPercent={groupAverages.pearl} selectedOptionIdx={selectedOptionIdx} />
 
       <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe', marginBottom: '16px' }}>
-        <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '13px', margin: '0 0 8px 0' }}>✍️ كتابة تحدي الأربعاء</h3>
+        <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '13px', margin: '0 0 8px 0' }}>✍️ كتابة تحدي الأربعاء (لهذا الأسبوع)</h3>
         <textarea
           value={challengeDraft}
           onChange={(e) => setChallengeDraft(e.target.value)}
-          placeholder="اكتبي تحدي يوم الأربعاء هنا ليظهر للطالبات..."
+          placeholder="اكتبي تحدي الأربعاء هنا..."
           rows={2}
           style={{ width: '100%', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '8px', fontSize: '12px', resize: 'none', boxSizing: 'border-box' }}
         />
