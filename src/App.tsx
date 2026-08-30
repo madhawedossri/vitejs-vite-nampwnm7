@@ -116,30 +116,34 @@ function getVisibleItems(selectedOptionIdx, tier, wedChallengeText, customDailyC
   if (!optionObj) return items;
   const actualDayIdx = optionObj.realDayIdx;
 
-  if ([0, 1, 2, 6].includes(actualDayIdx)) {
+  // البنود الأساسية (لجميع الأيام ما عدا الجمعة)
+  if ([6, 0, 1, 2, 3, 4].includes(actualDayIdx)) {
     items.push({ id: 'listen', label: 'سماع المقرر', desc: 'سماع النصاب 3 مرات من الشيخ.', emoji: '🎧', weekly: false });
     items.push({ id: 'recite', label: 'السرد مع رفيقة', desc: 'سرده مرتين بدون خطأ أو تنبيه أو لحن.', emoji: '🪸', weekly: false });
     items.push({ id: 'repeat', label: 'التكرار الذاتي', desc: 'التكرار 7 مرات (تسجيل صوتي أو بالورقة).', emoji: '🫧', weekly: false });
     items.push({ id: 'tafsir', label: 'التفسير', desc: 'قراءة تفسير النصاب.', emoji: '📖', weekly: false });
 
-    let reviewDesc = 'مراجعة الورد السابق';
-    if (actualDayIdx === 6) reviewDesc = 'مراجعة مقرر السبت مرتين ذاتياً';
-    else if (actualDayIdx === 0) reviewDesc = 'مراجعة مقرر السبت والأحد مرتين ذاتياً';
-    else if (actualDayIdx === 1) reviewDesc = 'مراجعة مقرر السبت والاثنين مرتين ذاتياً';
-
-    items.push({ id: 'review', label: 'مراجعة السابق', desc: reviewDesc, emoji: '🐬', weekly: false });
+    // المراجعة السابقة (الأحد، الاثنين، الثلاثاء)
+    if (actualDayIdx === 0) {
+      items.push({ id: 'review', label: 'مراجعة السابق', desc: 'مراجعة مقرر السبت مرتين ذاتياً', emoji: '🐬', weekly: false });
+    } else if (actualDayIdx === 1) {
+      items.push({ id: 'review', label: 'مراجعة السابق', desc: 'مراجعة مقرر السبت والأحد مرتين ذاتياً', emoji: '🐬', weekly: false });
+    } else if (actualDayIdx === 2) {
+      items.push({ id: 'review', label: 'مراجعة السابق', desc: 'مراجعة مقرر السبت والأحد والاثنين مرتين ذاتياً', emoji: '🐬', weekly: false });
+    }
   }
 
-  if ((tier === 'second' || tier === 'third') && [6, 0, 1, 2, 3].includes(actualDayIdx)) {
+  // المراجعة الكبرى: للدفعة الثانية والدورة الثالثة (من السبت للثلاثاء: 6، 0، 1، 2)
+  if ((tier === 'second' || tier === 'third') && [6, 0, 1, 2].includes(actualDayIdx)) {
     items.push({ id: 'majorReview', label: 'المراجعة الكبرى', desc: 'خاص بطالبات الدفعة الثانية والدورة الثالثة', emoji: '⭐️', weekly: false });
   }
 
-  // يوم الخميس (actualDayIdx === 4): خاص لطالبات التراكمية فقط
-  if (tier === 'third' && actualDayIdx === 4) {
-    items.push({ id: 'cumulativeReview', label: 'المراجعة التراكمية', desc: 'خاص بطالبات الدورة الثالثة — تُنجز في يوم الخميس', emoji: '⛓️✨', weekly: true });
+  // المراجعة التراكمية: لطالبات الدورة الثالثة فقط (من السبت للخميس: 6، 0، 1، 2، 3، 4)
+  if (tier === 'third' && [6, 0, 1, 2, 3, 4].includes(actualDayIdx)) {
+    items.push({ id: 'cumulativeReview', label: 'المراجعة التراكمية', desc: 'خاص بطالبات الدورة الثالثة', emoji: '⛓️✨', weekly: true });
   }
 
-  // يوم الأربعاء الثابت
+  // تحدي الأربعاء الثابت (يوم الأربعاء: 3)
   if (actualDayIdx === 3) {
     items.push({
       id: 'wedChallenge',
@@ -150,6 +154,7 @@ function getVisibleItems(selectedOptionIdx, tier, wedChallengeText, customDailyC
     });
   }
 
+  // التحدي اليومي الإضافي من المشرفة
   if (customDailyChallenge && customDailyChallenge.trim()) {
     items.push({
       id: 'customChallenge',
@@ -177,7 +182,6 @@ function percentFor(items, dailySaved, weeklySaved) {
 function computeGroupAverages(selectedOptionIdx, wedChallengeText, customDailyChallenge, daily, weekly, availableDays, studentList) {
   const sums = { coral: [], pearl: [] };
   studentList.forEach((s) => {
-    // الطالبات غير التراكميات لا يحسب عليهم الخميس لو ظهر بالغلط
     const items = getVisibleItems(selectedOptionIdx, s.tier, wedChallengeText, customDailyChallenge, availableDays);
     const percent = percentFor(items, daily?.[s.id], weekly?.[s.id]);
     sums[s.group].push(percent);
@@ -413,7 +417,7 @@ function StudentFlow({ onExit }) {
   const [customChallengeText, setCustomChallengeText] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
 
-  // توليد الأيام بدون يوم الجمعة، ويوم الخميس يظهر فقط لطالبات الدورة الثالثة (التراكمية)
+  // توليد الأيام بدون يوم الجمعة
   const availableDays = useMemo(() => {
     const list = [];
     const maxAllowedOptionIdx = 13;
@@ -421,10 +425,7 @@ function StudentFlow({ onExit }) {
       WEEK_ORDER.forEach((realDayIdx, i) => {
         const optionIdx = (w - 1) * 7 + i;
         if (optionIdx <= maxAllowedOptionIdx) {
-          // استبعاد يوم الجمعة تماماً (realDayIdx === 5)
-          if (realDayIdx !== 5) {
-            // إذا كان يوم الخميس (realDayIdx === 4)، يظهر فقط إذا كانت الطالبة تراكمية (`student?.tier === 'third'`)
-            // لكن هنا في الـ useMemo لا نعرف الطالبة بعد، فلنسمح بإضافته ونقوم بتصفيته بحسب الطالبة لاحقاً، أو ننشئ الدالة بحسب الطالبة.
+          if (realDayIdx !== 5) { // استبعاد الجمعة تماماً
             const dayLabel = DAY_NAMES[realDayIdx];
             list.push({
               idx: optionIdx,
@@ -439,7 +440,7 @@ function StudentFlow({ onExit }) {
     return list;
   }, []);
 
-  // تصفية الأيام بناءً على طالبة (الخميس يظهر فقط لطالبات الدورة الثالثة)
+  // تصفية الأيام: يوم الخميس (realDayIdx === 4) يظهر فقط لطالبات الدورة الثالثة (التراكمية)
   const studentAvailableDays = useMemo(() => {
     if (!student) return availableDays;
     return availableDays.filter(d => {
@@ -805,11 +806,11 @@ function SupervisorDashboard({ onExit, supervisor }) {
   const [customChallengeText, setCustomChallengeText] = useState('');
   const [customDraft, setCustomDraft] = useState('');
   const [savingChallenge, setSavingChallenge] = useState(false);
+  const [successMsg, setSuccessMsg] = useState(false);
   const [groupFilter, setGroupFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [selectedOptionIdx, setSelectedOptionIdx] = useState(0);
 
-  // للمشرفة تظهر جميع الأيام ما عدا الجمعة (لتتمكن من متابعة الخميس لطالبات التراكمية)
   const supervisorAvailableDays = useMemo(() => {
     const list = [];
     const maxAllowedOptionIdx = 13;
@@ -817,7 +818,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
       WEEK_ORDER.forEach((realDayIdx, i) => {
         const optionIdx = (w - 1) * 7 + i;
         if (optionIdx <= maxAllowedOptionIdx) {
-          if (realDayIdx !== 5) { // استبعاد الجمعة
+          if (realDayIdx !== 5) {
             const dayLabel = DAY_NAMES[realDayIdx];
             list.push({
               idx: optionIdx,
@@ -881,6 +882,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
 
   const saveChallenges = async () => {
     setSavingChallenge(true);
+    setSuccessMsg(false);
     const optionObj = supervisorAvailableDays.find(d => d.idx === selectedOptionIdx);
     const actualDayIdx = optionObj ? optionObj.realDayIdx : 0;
     
@@ -893,6 +895,8 @@ function SupervisorDashboard({ onExit, supervisor }) {
     setCustomChallengeText(customDraft);
 
     setSavingChallenge(false);
+    setSuccessMsg(true);
+    setTimeout(() => setSuccessMsg(false), 3000);
   };
 
   const rows = useMemo(() => {
@@ -981,8 +985,9 @@ function SupervisorDashboard({ onExit, supervisor }) {
           disabled={savingChallenge}
           style={{ width: '100%', backgroundColor: '#0f766e', color: '#ffffff', border: 'none', padding: '8px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer' }}
         >
-          {savingChallenge ? 'جارِ الحفظ والترسيل...' : 'حفظ وإرسال التحدي للطالبات'}
+          {savingChallenge ? 'جارِ الإرسال...' : 'حفظ وإرسال التحدي للطالبات'}
         </button>
+        {successMsg && <div style={{ color: '#16a34a', fontSize: '12px', textAlign: 'center', marginTop: '6px', fontWeight: 'bold' }}>تم الإرسال بنجاح ✓</div>}
       </div>
 
       <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe', marginBottom: '16px' }}>
