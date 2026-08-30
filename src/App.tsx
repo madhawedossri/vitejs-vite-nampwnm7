@@ -144,8 +144,8 @@ function getVisibleItems(displayIdx, tier, wedChallengeText) {
   if (displayIdx === 3) {
     items.push({
       id: 'wedChallenge',
-      label: 'تحدي الأربعاء',
-      desc: wedChallengeText && wedChallengeText.trim() ? wedChallengeText : 'بانتظار المشرفة لكتابة تحدي هذا الأسبوع...',
+      label: 'تحدي الأربعاء / اليوم',
+      desc: wedChallengeText && wedChallengeText.trim() ? wedChallengeText : 'بانتظار المشرفة لكتابة التحدي...',
       emoji: '🦪',
       weekly: false,
     });
@@ -165,8 +165,9 @@ function percentFor(items, dailySaved, weeklySaved) {
   return Math.round((done / items.length) * 100);
 }
 
-function computeGroupAverages(dayIndex, challengeText, daily, weekly) {
+function computeGroupAverages(dayIndex, challengesMap, daily, weekly) {
   const sums = { coral: [], pearl: [] };
+  const challengeText = challengesMap?.[dayIndex] || '';
   STUDENTS.forEach((s) => {
     const items = getVisibleItems(dayIndex, s.tier, challengeText);
     const percent = percentFor(items, daily?.[s.id], weekly?.[s.id]);
@@ -194,9 +195,9 @@ async function saveJSON(key, data) {
   } catch (e) { return false; }
 }
 
-async function saveChallengeText(key, text) {
+async function saveChallengeMap(key, mapData) {
   try {
-    await setDoc(doc(db, 'wird', key), { value: text });
+    await setDoc(doc(db, 'wird', key), { value: JSON.stringify(mapData) });
     return true;
   } catch (e) { return false; }
 }
@@ -318,9 +319,11 @@ function TopBar({ onExit, title, formattedDate, countdownMs, selectedDayIdx, set
   return (
     <div style={{ width: '100%', marginBottom: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <button onClick={onExit} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '14px', fontWeight: 'bold' }}>
-          <ArrowRight size={16} /> رجوع
-        </button>
+        {onExit ? (
+          <button onClick={onExit} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '14px', fontWeight: 'bold' }}>
+            <ArrowRight size={16} /> خروج
+          </button>
+        ) : <div style={{ width: '40px' }} />}
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '18px', fontWeight: '800', color: '#0f766e' }}>{title}</div>
           
@@ -409,7 +412,7 @@ function StudentFlow({ onExit }) {
   const [pinError, setPinError] = useState('');
   const [daily, setDaily] = useState({});
   const [weekly, setWeekly] = useState({});
-  const [challengeText, setChallengeText] = useState('');
+  const [challengesMap, setChallengesMap] = useState({});
   const [showCelebration, setShowCelebration] = useState(false);
 
   const [selectedDayIdx, setSelectedDayIdx] = useState(clock.dayIndex);
@@ -449,8 +452,11 @@ function StudentFlow({ onExit }) {
     });
 
     const unsubChallenge = onSnapshot(doc(db, 'wird', clock.challengeKey), (snap) => {
-      if (snap.exists()) setChallengeText(snap.data().value || '');
-      else setChallengeText('');
+      if (snap.exists() && snap.data().value) {
+        try { setChallengesMap(JSON.parse(snap.data().value)); } catch(e) { setChallengesMap({}); }
+      } else {
+        setChallengesMap({});
+      }
     });
 
     return () => { unsubDaily(); unsubWeekly(); unsubChallenge(); };
@@ -483,11 +489,12 @@ function StudentFlow({ onExit }) {
     }
   };
 
-  const items = student ? getVisibleItems(selectedDayIdx, student.tier, challengeText) : [];
+  const currentChallengeText = challengesMap[selectedDayIdx] || '';
+  const items = student ? getVisibleItems(selectedDayIdx, student.tier, currentChallengeText) : [];
   const myDaily = student ? daily?.[student.id] : null;
   const myWeekly = student ? weekly?.[student.id] : null;
   const percent = useMemo(() => percentFor(items, myDaily, myWeekly), [items, myDaily, myWeekly]);
-  const groupAverages = useMemo(() => computeGroupAverages(selectedDayIdx, challengeText, daily, weekly), [selectedDayIdx, challengeText, daily, weekly]);
+  const groupAverages = useMemo(() => computeGroupAverages(selectedDayIdx, challengesMap, daily, weekly), [selectedDayIdx, challengesMap, daily, weekly]);
 
   const toggleItem = async (item) => {
     if (!student) return;
@@ -528,12 +535,12 @@ function StudentFlow({ onExit }) {
       return (
         <div>
           <button onClick={() => setPendingStudent(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '12px' }}>
-            <ArrowRight size={16} /> رجوع
+            <ArrowRight size={16} /> رجوع للقائمة
           </button>
           <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '24px', textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
             <div style={{ fontSize: '36px' }}>🔒🦪</div>
             <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#0f766e', margin: '8px 0' }}>{pendingStudent.name}</h2>
-            <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '16px' }}>{hasPin ? 'أدخلي رمزكِ السري (4 أرقام)' : 'أنشئي رمزكِ السري الخاص (4 أرقام)'}</p>
+            <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '16px' }}>{hasPin ? 'أدخلي رمزكِ السري للدخول على هذا الجهاز' : 'أدخلي رمزاً سرياً جديداً (4 أرقام) خاصاً بكِ'}</p>
             <input
               type="password"
               maxLength={4}
@@ -554,7 +561,7 @@ function StudentFlow({ onExit }) {
             )}
             {pinError && <div style={{ color: '#ef4444', fontSize: '12px', marginBottom: '10px' }}>{pinError}</div>}
             <button onClick={submitPin} style={{ width: '100%', backgroundColor: '#0d9488', color: '#ffffff', border: 'none', padding: '12px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }}>
-              {hasPin ? 'دخول' : 'حفظ ودخول'}
+              دخول
             </button>
           </div>
         </div>
@@ -569,14 +576,7 @@ function StudentFlow({ onExit }) {
             return (
               <button
                 key={s.id}
-                onClick={() => {
-                  const savedPin = pins?.[s.id];
-                  if (savedPin && localStorage.getItem('saved_student_id') === s.id) {
-                    setStudent(s);
-                  } else {
-                    setPendingStudent(s);
-                  }
-                }}
+                onClick={() => setPendingStudent(s)}
                 style={{ backgroundColor: '#ffffff', borderRadius: '16px', border: `1px solid ${s.group === 'coral' ? '#ffe4e6' : '#ccfbf1'}`, padding: '12px 8px', textAlign: 'center', cursor: 'pointer' }}
               >
                 <div style={{ fontSize: '20px' }}>{GROUPS[s.group].emoji}</div>
@@ -594,7 +594,7 @@ function StudentFlow({ onExit }) {
   const g = GROUPS[student.group];
 
   const sortedTeammates = [...teammates].map((t) => {
-    const tItems = getVisibleItems(selectedDayIdx, t.tier, challengeText);
+    const tItems = getVisibleItems(selectedDayIdx, t.tier, currentChallengeText);
     const tPercent = percentFor(tItems, daily[t.id], weekly[t.id]);
     const completedAt = daily[t.id]?.completedAt || null;
     return { ...t, tPercent, completedAt };
@@ -613,10 +613,7 @@ function StudentFlow({ onExit }) {
     <div>
       {showCelebration && <CelebrationModal onClose={() => setShowCelebration(false)} />}
       <TopBar
-        onExit={() => {
-          setStudent(null);
-          setPendingStudent(null);
-        }}
+        onExit={null}
         title={`أهلاً، ${student.name} ${g.emoji}`}
         formattedDate={clock.formattedDate}
         countdownMs={clock.msRemaining}
@@ -739,23 +736,23 @@ function SupervisorDashboard({ onExit, supervisor }) {
   const [daily, setDaily] = useState({});
   const [weekly, setWeekly] = useState({});
   const [pins, setPins] = useState({});
-  const [challengeText, setChallengeText] = useState('');
+  const [challengesMap, setChallengesMap] = useState({});
+  const [targetChallengeDay, setTargetChallengeDay] = useState(0);
   const [challengeDraft, setChallengeDraft] = useState('');
   const [savingChallenge, setSavingChallenge] = useState(false);
   const [groupFilter, setGroupFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [selectedDayIdx, setSelectedDayIdx] = useState(clock.dayIndex);
 
-  const availableDays = useMemo(() => {
-    const weekOrder = [6, 0, 1, 2, 3, 4, 5];
-    const currentOrderPos = weekOrder.indexOf(clock.dayIndex);
-    const result = [];
-    for (let i = 0; i <= currentOrderPos; i++) {
-      const idx = weekOrder[i];
-      result.push({ idx, name: DAY_NAMES[idx] });
-    }
-    return result;
-  }, [clock.dayIndex]);
+  const supervisorAvailableDays = [
+    { idx: 6, name: 'السبت' },
+    { idx: 0, name: 'الأحد' },
+    { idx: 1, name: 'الاثنين' },
+    { idx: 2, name: 'الثلاثاء' },
+    { idx: 3, name: 'الأربعاء' },
+    { idx: 4, name: 'الخميس' },
+    { idx: 5, name: 'الجمعة' },
+  ];
 
   useEffect(() => {
     const unsubDaily = onSnapshot(doc(db, 'wird', clock.dailyKey), (snap) => {
@@ -769,17 +766,29 @@ function SupervisorDashboard({ onExit, supervisor }) {
     });
 
     const unsubChallenge = onSnapshot(doc(db, 'wird', clock.challengeKey), (snap) => {
-      if (snap.exists()) {
-        const val = snap.data().value || '';
-        setChallengeText(val);
-        setChallengeDraft(val);
+      if (snap.exists() && snap.data().value) {
+        try {
+          const parsed = JSON.parse(snap.data().value);
+          setChallengesMap(parsed);
+          setChallengeDraft(parsed[targetChallengeDay] || '');
+        } catch(e) {
+          setChallengesMap({});
+        }
+      } else {
+        setChallengesMap({});
       }
     });
 
     loadJSON(PINS_KEY).then((data) => setPins(data || {}));
 
     return () => { unsubDaily(); unsubWeekly(); unsubChallenge(); };
-  }, [clock.dailyKey, clock.weeklyKey, clock.challengeKey]);
+  }, [clock.dailyKey, clock.weeklyKey, clock.challengeKey, targetChallengeDay]);
+
+  const handleTargetDayChange = (e) => {
+    const day = Number(e.target.value);
+    setTargetChallengeDay(day);
+    setChallengeDraft(challengesMap[day] || '');
+  };
 
   const resetPin = async (studentId) => {
     const updated = { ...pins };
@@ -790,20 +799,24 @@ function SupervisorDashboard({ onExit, supervisor }) {
 
   const saveChallenge = async () => {
     setSavingChallenge(true);
-    await saveChallengeText(clock.challengeKey, challengeDraft);
+    const updatedMap = { ...challengesMap, [targetChallengeDay]: challengeDraft };
+    setChallengesMap(updatedMap);
+    await saveChallengeMap(clock.challengeKey, updatedMap);
     setSavingChallenge(false);
   };
 
+  const currentChallengeText = challengesMap[selectedDayIdx] || '';
+
   const rows = useMemo(() => {
     return STUDENTS.map((s) => {
-      const items = getVisibleItems(selectedDayIdx, s.tier, challengeText);
+      const items = getVisibleItems(selectedDayIdx, s.tier, currentChallengeText);
       const percent = percentFor(items, daily[s.id], weekly[s.id]);
       const hasCumulative = !!weekly[s.id]?.cumulativeReview?.completed;
       return { ...s, percent, hasCumulative, completedAt: daily[s.id]?.completedAt || null };
     });
-  }, [daily, weekly, selectedDayIdx, challengeText]);
+  }, [daily, weekly, selectedDayIdx, currentChallengeText]);
 
-  const groupAverages = useMemo(() => computeGroupAverages(selectedDayIdx, challengeText, daily, weekly), [selectedDayIdx, challengeText, daily, weekly]);
+  const groupAverages = useMemo(() => computeGroupAverages(selectedDayIdx, challengesMap, daily, weekly), [selectedDayIdx, challengesMap, daily, weekly]);
 
   const leaderboard = useMemo(() => {
     return rows
@@ -840,18 +853,33 @@ function SupervisorDashboard({ onExit, supervisor }) {
         countdownMs={clock.msRemaining}
         selectedDayIdx={selectedDayIdx}
         setSelectedDayIdx={setSelectedDayIdx}
-        availableDays={availableDays}
+        availableDays={supervisorAvailableDays}
         weekNum={clock.currentWeekNum}
       />
 
       <GroupRace coralPercent={groupAverages.coral} pearlPercent={groupAverages.pearl} selectedDayIdx={selectedDayIdx} />
 
       <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', border: '1px solid #e0f2fe', marginBottom: '16px' }}>
-        <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '13px', margin: '0 0 8px 0' }}>✍️ كتابة تحدي الأربعاء الأسبوعي</h3>
+        <h3 style={{ fontWeight: '800', color: '#334155', fontSize: '13px', margin: '0 0 8px 0' }}>✍️ كتابة التحدي أو الملاحظة لكل يوم</h3>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+          <select
+            value={targetChallengeDay}
+            onChange={handleTargetDayChange}
+            style={{ flex: 1, border: '1px solid #cbd5e1', borderRadius: '10px', padding: '6px', fontSize: '12px', fontWeight: 'bold', backgroundColor: '#f8fafc' }}
+          >
+            <option value={6}>السبت</option>
+            <option value={0}>الأحد</option>
+            <option value={1}>الاثنين</option>
+            <option value={2}>الثلاثاء</option>
+            <option value={3}>الأربعاء</option>
+            <option value={4}>الخميس</option>
+            <option value={5}>الجمعة</option>
+          </select>
+        </div>
         <textarea
           value={challengeDraft}
           onChange={(e) => setChallengeDraft(e.target.value)}
-          placeholder="اكتبي التحدي هنا في أي وقت وسوف يظهر للطالبات يوم الأربعاء..."
+          placeholder="اكتبي تحدي اليوم المحدد هنا..."
           rows={2}
           style={{ width: '100%', border: '1px solid #cbd5e1', borderRadius: '12px', padding: '8px', fontSize: '12px', resize: 'none', boxSizing: 'border-box' }}
         />
@@ -860,7 +888,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
           disabled={savingChallenge}
           style={{ width: '100%', backgroundColor: '#0f766e', color: '#ffffff', border: 'none', padding: '8px', borderRadius: '10px', fontSize: '12px', fontWeight: 'bold', marginTop: '6px', cursor: 'pointer' }}
         >
-          {savingChallenge ? 'جارِ الحفظ...' : 'حفظ التحدي'}
+          {savingChallenge ? 'جارِ الحفظ...' : 'حفظ التحدي لهذا اليوم'}
         </button>
       </div>
 
