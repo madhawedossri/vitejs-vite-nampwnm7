@@ -66,7 +66,7 @@ const SUPERVISORS = [
 const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
 /* ---------------------------------------------------------------
-   حساب موعد التجدد (الساعة 4:30 عصراً)
+   حساب موعد التجدد وتوقيت السعودية الثابت (الساعة 4:30 عصراً)
 --------------------------------------------------------------- */
 const CUTOFF_HOUR = 16;
 const CUTOFF_MIN = 30;
@@ -78,9 +78,15 @@ function useCycleClock() {
     return () => clearInterval(t);
   }, []);
 
-  const cycleStart = new Date(now);
+  // ضبط الوقت حصرياً على توقيت السعودية لتجنب تضارب الأجهزة
+  const ksaNowString = now.toLocaleString('en-US', { timeZone: 'Asia/Riyadh', hour12: false });
+  const ksaNow = new Date(ksaNowString);
+
+  const cycleStart = new Date(ksaNow);
   cycleStart.setHours(CUTOFF_HOUR, CUTOFF_MIN, 0, 0);
-  if (now.getTime() < cycleStart.getTime()) {
+  
+  // إذا كان الوقت قبل 4:30 عصراً، فنحن نتبع فعلياً "اليورد/البند" الخاص بيوم أمس حتى تكتمل الدورة
+  if (ksaNow.getTime() < cycleStart.getTime()) {
     cycleStart.setDate(cycleStart.getDate() - 1);
   }
 
@@ -88,10 +94,15 @@ function useCycleClock() {
   cycleEnd.setDate(cycleEnd.getDate() + 1);
 
   const dayIndex = cycleStart.getDay();
-  const dateKey = cycleStart.toISOString().slice(0, 10);
+  
+  const year = cycleStart.getFullYear();
+  const month = String(cycleStart.getMonth() + 1).padStart(2, '0');
+  const day = String(cycleStart.getDate()).padStart(2, '0');
+  const dateKey = `${year}-${month}-${day}`;
+  
   const currentWeekNum = 1;
 
-  const formattedDate = cycleStart.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric' });
+  const formattedDate = cycleStart.toLocaleDateString('ar-SA', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' });
 
   return {
     now,
@@ -355,14 +366,14 @@ function TopBar({ onExit, title, formattedDate, countdownMs, selectedDayIdx, set
             </div>
           )}
 
-          {formattedDate && <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>📅 {formattedDate}</div>}
+          {formattedDate && <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>📅 {formattedDate} (يتجدد الورد 4:30 عصراً)</div>}
         </div>
         <div style={{ width: '40px' }} />
       </div>
 
       {typeof countdownMs === 'number' && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '10px', fontSize: '11px', color: '#d97706', backgroundColor: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '20px', padding: '6px 12px', width: 'fit-content', margin: '10px auto 0' }}>
-          <span>⏳ المتبقي لتسليم اليوم (4:30 عصراً):</span>
+          <span>⏳ المتبقي لنهاية الورد الحالي (4:30 عصراً):</span>
           <span style={{ fontWeight: 'bold' }}>{formatDuration(countdownMs)}</span>
         </div>
       )}
@@ -744,6 +755,7 @@ function SupervisorDashboard({ onExit, supervisor }) {
   const [search, setSearch] = useState('');
   const [selectedDayIdx, setSelectedDayIdx] = useState(clock.dayIndex);
 
+  // تمكين المشرفة من استعراض جميع أيام الأسبوع بالترتيب الصحيح
   const supervisorAvailableDays = [
     { idx: 6, name: 'السبت' },
     { idx: 0, name: 'الأحد' },
