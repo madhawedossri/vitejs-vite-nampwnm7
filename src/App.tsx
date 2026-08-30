@@ -66,8 +66,16 @@ const SUPERVISORS = [
 const DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 const WEEK_ORDER = [6, 0, 1, 2, 3, 4, 5]; // السبت إلى الجمعة
 
+// أقصى رقم يوم متاح بالبرنامج (14 يوماً = أسبوعان)، ونفس الرقم يُستخدم في الطالبة والمشرفة
+// حتى تتطابق مفاتيح الحفظ بينهما دائماً
+const MAX_OPTION_IDX = 13;
+
+// تاريخ بداية الأسبوع الأول (أول يوم سبت بالبرنامج) بتوقيت السعودية
+// عدّلي هذا التاريخ فقط إذا تغيّر تاريخ انطلاق البرنامج مستقبلاً
+const PROGRAM_START_DATE_KSA = '2026-08-29';
+
 /* ---------------------------------------------------------------
-   حساب التوقيت (بالتاريخ الهجري الصريح)
+   حساب التوقيت (بالتاريخ الهجري الصريح) + رقم اليوم الفعلي بالبرنامج
 --------------------------------------------------------------- */
 const CUTOFF_HOUR = 16;
 const CUTOFF_MIN = 30;
@@ -95,11 +103,19 @@ function useCycleClock() {
 
   const formattedDate = cycleStart.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' });
 
+  // رقم اليوم الفعلي منذ بداية البرنامج (0 = أول سبت). هذا هو المرجع الوحيد
+  // لتحديد اليوم/الأسبوع الحالي بدل تخمين "أقرب يوم بنفس الاسم"
+  const startDateObj = new Date(PROGRAM_START_DATE_KSA + 'T00:00:00');
+  const startMidnight = new Date(startDateObj.getFullYear(), startDateObj.getMonth(), startDateObj.getDate());
+  const cycleMidnight = new Date(cycleStart.getFullYear(), cycleStart.getMonth(), cycleStart.getDate());
+  const programDayIndex = Math.round((cycleMidnight.getTime() - startMidnight.getTime()) / 86400000);
+
   return {
     now,
     realDayOfWeek,
     formattedDate,
     msRemaining: cycleEnd.getTime() - now.getTime(),
+    programDayIndex,
   };
 }
 
@@ -113,6 +129,32 @@ function formatDuration(ms) {
   ].join(':');
 }
 
+// تحويل رقم اليوم الفعلي بالبرنامج إلى رقم خيار صالح (idx) ضمن الحدود المتاحة
+function clampToProgramRange(programDayIndex) {
+  return Math.min(Math.max(programDayIndex, 0), MAX_OPTION_IDX);
+}
+
+function buildAvailableDays() {
+  const list = [];
+  for (let w = 1; w <= 4; w++) {
+    WEEK_ORDER.forEach((realDayIdx, i) => {
+      const optionIdx = (w - 1) * 7 + i;
+      if (optionIdx <= MAX_OPTION_IDX) {
+        if (realDayIdx !== 5) {
+          const dayLabel = DAY_NAMES[realDayIdx];
+          list.push({
+            idx: optionIdx,
+            weekNum: w,
+            realDayIdx: realDayIdx,
+            name: `${dayLabel} ${w}/4`
+          });
+        }
+      }
+    });
+  }
+  return list;
+}
+
 function getVisibleItems(selectedOptionIdx, tier, wedChallengeText, availableDays) {
   const items = [];
   const optionObj = availableDays.find(d => d.idx === selectedOptionIdx);
@@ -124,22 +166,26 @@ function getVisibleItems(selectedOptionIdx, tier, wedChallengeText, availableDay
     items.push({ id: 'recite', label: 'السرد مع رفيقة', desc: 'سرده مرتين بدون خطأ أو تنبيه أو لحن.', emoji: '🪸', weekly: false });
     items.push({ id: 'repeat', label: 'التكرار الذاتي', desc: 'التكرار 7 مرات (تسجيل صوتي أو بالورقة).', emoji: '🫧', weekly: false });
     items.push({ id: 'tafsir', label: 'التفسير', desc: 'قراءة تفسير النصاب.', emoji: '📖', weekly: false });
+  }
 
-    let reviewDesc = 'مراجعة الورد السابق';
-    if (actualDayIdx === 6) reviewDesc = 'مراجعة مقرر السبت مرتين ذاتياً';
-    else if (actualDayIdx === 0) reviewDesc = 'مراجعة مقرر السبت والأحد مرتين ذاتياً';
-    else if (actualDayIdx === 1) reviewDesc = 'مراجعة مقرر السبت والاثنين مرتين ذاتياً';
+  // مراجعة السابق: ثلاثة أيام فقط (الأحد، الاثنين، الثلاثاء)
+  if ([0, 1, 2].includes(actualDayIdx)) {
+    let reviewDesc = '';
+    if (actualDayIdx === 0) reviewDesc = 'مراجعة مقرر السبت مرتين ذاتياً';
+    else if (actualDayIdx === 1) reviewDesc = 'مراجعة مقرر السبت والأحد مرتين ذاتياً';
+    else if (actualDayIdx === 2) reviewDesc = 'مراجعة مقرر السبت والأحد والاثنين مرتين ذاتياً';
 
     items.push({ id: 'review', label: 'مراجعة السابق', desc: reviewDesc, emoji: '🐬', weekly: false });
   }
 
-  if ((tier === 'second' || tier === 'third') && [6, 0, 1, 2, 3].includes(actualDayIdx)) {
+  // المراجعة الكبرى: من السبت للثلاثاء، لطالبات الدفعة الثانية والدورة الثالثة
+  if ((tier === 'second' || tier === 'third') && [6, 0, 1, 2].includes(actualDayIdx)) {
     items.push({ id: 'majorReview', label: 'المراجعة الكبرى', desc: 'خاص بطالبات الدفعة الثانية والدورة الثالثة', emoji: '⭐️', weekly: false });
   }
 
-  // يوم الخميس (actualDayIdx === 4): خاص لطالبات التراكمية فقط
-  if (tier === 'third' && actualDayIdx === 4) {
-    items.push({ id: 'cumulativeReview', label: 'المراجعة التراكمية', desc: 'خاص بطالبات الدورة الثالثة — تُنجز في يوم الخميس', emoji: '⛓️✨', weekly: true });
+  // المراجعة التراكمية: من السبت للخميس (كل أيام الأسبوع ما عدا الجمعة)، لطالبات الدورة الثالثة فقط
+  if (tier === 'third' && [6, 0, 1, 2, 3, 4].includes(actualDayIdx)) {
+    items.push({ id: 'cumulativeReview', label: 'المراجعة التراكمية', desc: 'خاص بطالبات الدورة الثالثة', emoji: '⛓️✨', weekly: true });
   }
 
   // يوم الأربعاء الثابت
@@ -304,7 +350,7 @@ function CelebrationModal({ onClose }) {
   );
 }
 
-function TopBar({ onExit, title, formattedDate, countdownMs, selectedOptionIdx, setSelectedOptionIdx, availableDays, showDropdown = true }) {
+function TopBar({ onExit, title, formattedDate, countdownMs, selectedOptionIdx, setSelectedOptionIdx, availableDays, showDropdown = true, staticDayLabel = null }) {
   return (
     <div style={{ width: '100%', marginBottom: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -315,7 +361,7 @@ function TopBar({ onExit, title, formattedDate, countdownMs, selectedOptionIdx, 
         ) : <div style={{ width: '40px' }} />}
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '18px', fontWeight: '800', color: '#0f766e' }}>{title}</div>
-          
+
           {showDropdown && availableDays && (
             <div style={{ position: 'relative', display: 'inline-block', marginTop: '6px' }}>
               <select
@@ -341,6 +387,22 @@ function TopBar({ onExit, title, formattedDate, countdownMs, selectedOptionIdx, 
                 ))}
               </select>
               <ChevronDown size={14} color="#0f766e" style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+            </div>
+          )}
+
+          {!showDropdown && staticDayLabel && (
+            <div style={{
+              display: 'inline-block',
+              marginTop: '6px',
+              backgroundColor: '#ccfbf1',
+              color: '#0f766e',
+              border: '1px solid #99f6e4',
+              borderRadius: '12px',
+              padding: '6px 14px',
+              fontSize: '13px',
+              fontWeight: '800',
+            }}>
+              {staticDayLabel}
             </div>
           )}
 
@@ -404,27 +466,7 @@ function StudentFlow({ onExit }) {
   const [wedChallengeText, setWedChallengeText] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
 
-  const availableDays = useMemo(() => {
-    const list = [];
-    const maxAllowedOptionIdx = 13;
-    for (let w = 1; w <= 4; w++) {
-      WEEK_ORDER.forEach((realDayIdx, i) => {
-        const optionIdx = (w - 1) * 7 + i;
-        if (optionIdx <= maxAllowedOptionIdx) {
-          if (realDayIdx !== 5) {
-            const dayLabel = DAY_NAMES[realDayIdx];
-            list.push({
-              idx: optionIdx,
-              weekNum: w,
-              realDayIdx: realDayIdx,
-              name: `${dayLabel} ${w}/4`
-            });
-          }
-        }
-      });
-    }
-    return list;
-  }, []);
+  const availableDays = useMemo(() => buildAvailableDays(), []);
 
   const studentAvailableDays = useMemo(() => {
     if (!student) return availableDays;
@@ -436,10 +478,9 @@ function StudentFlow({ onExit }) {
     });
   }, [availableDays, student]);
 
-  const [selectedOptionIdx, setSelectedOptionIdx] = useState(() => {
-    const match = availableDays.find(d => d.realDayIdx === clock.realDayOfWeek);
-    return match ? match.idx : 0;
-  });
+  // اليوم مقفول تلقائياً على اليوم الفعلي الحالي فقط (حسب تاريخ البرنامج الحقيقي)
+  // ولا يمكن للطالبة اختيار يوم آخر أو رؤية أيام قادمة
+  const selectedOptionIdx = useMemo(() => clampToProgramRange(clock.programDayIndex), [clock.programDayIndex]);
 
   useEffect(() => { loadJSON(PINS_KEY).then((data) => setPins(data || {})); }, []);
 
@@ -507,7 +548,7 @@ function StudentFlow({ onExit }) {
   const myDaily = student ? daily?.[student.id] : null;
   const myWeekly = student ? weekly?.[student.id] : null;
   const percent = useMemo(() => percentFor(items, myDaily, myWeekly), [items, myDaily, myWeekly]);
-  const groupAverages = useMemo(() => computeGroupAverages(selectedOptionIdx, wedChallengeText, daily, weekly, studentAvailableDays, STUDENTS), [selectedOptionIdx, wedChallengeText, daily, weekly, studentAvailableDays]);
+  const groupAverages = useMemo(() => computeGroupAverages(selectedOptionIdx, wedChallengeText, daily, weekly, availableDays, STUDENTS), [selectedOptionIdx, wedChallengeText, daily, weekly, availableDays]);
 
   const toggleItem = async (item) => {
     if (!student) return;
@@ -607,7 +648,7 @@ function StudentFlow({ onExit }) {
   const g = GROUPS[student.group];
 
   const sortedTeammates = [...teammates].map((t) => {
-    const tItems = getVisibleItems(selectedOptionIdx, t.tier, wedChallengeText, studentAvailableDays);
+    const tItems = getVisibleItems(selectedOptionIdx, t.tier, wedChallengeText, availableDays);
     const tPercent = percentFor(tItems, daily[t.id], weekly[t.id]);
     const completedAt = daily[t.id]?.completedAt || null;
     return { ...t, tPercent, completedAt };
@@ -621,7 +662,8 @@ function StudentFlow({ onExit }) {
   });
 
   const completedTeammatesList = sortedTeammates.filter(t => t.tPercent === 100);
-  const currentOptionObj = studentAvailableDays.find(d => d.idx === selectedOptionIdx) || studentAvailableDays[0];
+  const currentOptionObj = studentAvailableDays.find(d => d.idx === selectedOptionIdx);
+  const isRestDay = !currentOptionObj; // يوم الجمعة، أو الخميس لغير طالبات الدورة الثالثة
 
   return (
     <div>
@@ -631,42 +673,51 @@ function StudentFlow({ onExit }) {
         title={`أهلاً، ${student.name} ${g.emoji}`}
         formattedDate={clock.formattedDate}
         countdownMs={clock.msRemaining}
-        selectedOptionIdx={selectedOptionIdx}
-        setSelectedOptionIdx={setSelectedOptionIdx}
-        availableDays={studentAvailableDays}
+        showDropdown={false}
+        staticDayLabel={isRestDay ? 'يوم راحة 🌙' : currentOptionObj.name}
       />
-
-      <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <span style={{ fontWeight: '800', color: '#0f766e', fontSize: '14px' }}>ورد يوم {currentOptionObj?.name}</span>
-          <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 'bold' }}>{percent}%</span>
-        </div>
-        <PearlBar percent={percent} big />
-      </div>
 
       <GroupRace coralPercent={groupAverages.coral} pearlPercent={groupAverages.pearl} />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
-        {items.map((it) => {
-          const done = isItemDone(it, myDaily, myWeekly);
-          return (
-            <button
-              key={it.id}
-              onClick={() => toggleItem(it)}
-              style={{ width: '100%', textAlign: 'right', display: 'flex', alignItems: 'flex-start', gap: '10px', borderRadius: '16px', border: `1px solid ${done ? '#86efac' : '#e0f2fe'}`, backgroundColor: done ? '#f0fdf4' : '#ffffff', padding: '12px', cursor: 'pointer' }}
-            >
-              <span style={{ fontSize: '20px' }}>{it.emoji}</span>
-              <span style={{ flex: 1 }}>
-                <span style={{ display: 'block', fontWeight: 'bold', fontSize: '13px', color: done ? '#15803d' : '#334155', textDecoration: done ? 'line-through' : 'none' }}>{it.label}</span>
-                <span style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{it.desc}</span>
-              </span>
-              <span style={{ width: '20px', height: '20px', borderRadius: '50%', border: `2px solid ${done ? '#22c55e' : '#cbd5e1'}`, backgroundColor: done ? '#22c55e' : 'transparent', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px' }}>
-                {done ? '✓' : ''}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {isRestDay ? (
+        <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '20px', textAlign: 'center', border: '1px solid #e0f2fe', marginBottom: '20px' }}>
+          <div style={{ fontSize: '32px', marginBottom: '6px' }}>🌙🤍</div>
+          <div style={{ fontWeight: '800', color: '#0f766e', fontSize: '14px' }}>اليوم إجازة</div>
+          <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>لا يوجد وِرد اليوم، نلقاكِ غداً بإذن الله 🌊</div>
+        </div>
+      ) : (
+        <>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '20px', padding: '16px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontWeight: '800', color: '#0f766e', fontSize: '14px' }}>ورد يوم {currentOptionObj.name}</span>
+              <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 'bold' }}>{percent}%</span>
+            </div>
+            <PearlBar percent={percent} big />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+            {items.map((it) => {
+              const done = isItemDone(it, myDaily, myWeekly);
+              return (
+                <button
+                  key={it.id}
+                  onClick={() => toggleItem(it)}
+                  style={{ width: '100%', textAlign: 'right', display: 'flex', alignItems: 'flex-start', gap: '10px', borderRadius: '16px', border: `1px solid ${done ? '#86efac' : '#e0f2fe'}`, backgroundColor: done ? '#f0fdf4' : '#ffffff', padding: '12px', cursor: 'pointer' }}
+                >
+                  <span style={{ fontSize: '20px' }}>{it.emoji}</span>
+                  <span style={{ flex: 1 }}>
+                    <span style={{ display: 'block', fontWeight: 'bold', fontSize: '13px', color: done ? '#15803d' : '#334155', textDecoration: done ? 'line-through' : 'none' }}>{it.label}</span>
+                    <span style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{it.desc}</span>
+                  </span>
+                  <span style={{ width: '20px', height: '20px', borderRadius: '50%', border: `2px solid ${done ? '#22c55e' : '#cbd5e1'}`, backgroundColor: done ? '#22c55e' : 'transparent', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px' }}>
+                    {done ? '✓' : ''}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       <div>
         <h3 style={{ fontWeight: '800', fontSize: '14px', color: g.color, marginBottom: '8px' }}>صيد اللؤلؤ - {g.label}</h3>
@@ -789,31 +840,12 @@ function SupervisorDashboard({ onExit, supervisor }) {
   const [groupFilter, setGroupFilter] = useState('all');
   const [search, setSearch] = useState('');
 
-  const supervisorAvailableDays = useMemo(() => {
-    const list = [];
-    const maxAllowedOptionIdx = 13;
-    for (let w = 1; w <= 4; w++) {
-      WEEK_ORDER.forEach((realDayIdx, i) => {
-        const optionIdx = (w - 1) * 7 + i;
-        if (optionIdx <= maxAllowedOptionIdx) {
-          if (realDayIdx !== 5) {
-            const dayLabel = DAY_NAMES[realDayIdx];
-            list.push({
-              idx: optionIdx,
-              realDayIdx: realDayIdx,
-              name: `${dayLabel} ${w}/4`
-            });
-          }
-        }
-      });
-    }
-    return list;
-  }, []);
+  // نفس قائمة الأيام الكاملة (السبت للخميس، أربعة أسابيع) تبقى متاحة للمشرفة بالكامل
+  const supervisorAvailableDays = useMemo(() => buildAvailableDays(), []);
 
-  const [selectedOptionIdx, setSelectedOptionIdx] = useState(() => {
-    const match = supervisorAvailableDays.find(d => d.realDayIdx === clock.realDayOfWeek);
-    return match ? match.idx : 0;
-  });
+  // نفس الحساب التلقائي المعتمد على التاريخ الفعلي المستخدم عند الطالبة، حتى تتطابق
+  // القيمة الافتراضية بين الطرفين تلقائياً؛ وتقدر المشرفة تتنقل يدوياً من القائمة بعدها
+  const [selectedOptionIdx, setSelectedOptionIdx] = useState(() => clampToProgramRange(clock.programDayIndex));
 
   const currentDailyKey = `wird-daily_option_${selectedOptionIdx}`;
   const currentWeeklyKey = `wird-weekly_week_1`;
