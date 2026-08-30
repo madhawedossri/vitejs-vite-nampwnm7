@@ -18,7 +18,7 @@ const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp);
 
 /* ---------------------------------------------------------------
-   بيانات الطالبات والمجموعات والفئات
+   بيانات الطالبات والمجموعات والفئات (الاعتماد على الاسم لضمان التزامن)
 --------------------------------------------------------------- */
 const NAMES = [
   'سارة', 'لين', 'جنى', 'دانة', 'رهف', 'لمى', 'غلا', 'وعد', 'تالا', 'ريم',
@@ -40,7 +40,7 @@ const STUDENTS = NAMES.map((name, i) => {
     tier = 'third';
   }
   return {
-    id: 's' + (i + 1),
+    id: name,
     name: name,
     group: i % 2 === 0 ? 'coral' : 'pearl',
     tier: tier,
@@ -70,7 +70,7 @@ const MAX_OPTION_IDX = 13;
 const PROGRAM_START_DATE_KSA = '2026-08-29';
 
 /* ---------------------------------------------------------------
-   حساب التوقيت بحيث يبدأ اليوم الجديد تماماً الساعة 4:30 عصراً
+   حساب التوقيت الهجري (تبدأ الدورة الجديدة الساعة 4:30 عصراً)
 --------------------------------------------------------------- */
 const CUTOFF_HOUR = 16;
 const CUTOFF_MIN = 30;
@@ -85,7 +85,6 @@ function useCycleClock() {
   const ksaNowString = now.toLocaleString('en-US', { timeZone: 'Asia/Riyadh', hour12: false });
   const ksaNow = new Date(ksaNowString);
 
-  // حساب دورة الورد (تبدأ من 4:30 عصراً وتنتهي 4:30 عصر اليوم التالي)
   const cycleStart = new Date(ksaNow);
   cycleStart.setHours(CUTOFF_HOUR, CUTOFF_MIN, 0, 0);
   if (ksaNow.getTime() < cycleStart.getTime()) {
@@ -95,7 +94,14 @@ function useCycleClock() {
   const cycleEnd = new Date(cycleStart);
   cycleEnd.setDate(cycleEnd.getDate() + 1);
 
-  const formattedDate = cycleStart.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Riyadh' });
+  // تنسيق التاريخ الهجري بدون السنة (اليوم والشهر فقط)
+  const formattedDate = cycleStart.toLocaleDateString('ar-SA-u-ca-islamic-umalqura', { 
+    day: 'numeric', 
+    month: 'long', 
+    timeZone: 'Asia/Riyadh' 
+  });
+  
+  const dayNameOfWeek = DAY_NAMES[cycleStart.getDay() === 0 ? 0 : cycleStart.getDay() === 1 ? 1 : cycleStart.getDay() === 2 ? 2 : cycleStart.getDay() === 3 ? 3 : cycleStart.getDay() === 4 ? 4 : cycleStart.getDay() === 5 ? 5 : 6];
 
   const startDateObj = new Date(PROGRAM_START_DATE_KSA + 'T16:30:00');
   const programDayIndex = Math.floor((cycleStart.getTime() - startDateObj.getTime()) / 86400000);
@@ -103,6 +109,7 @@ function useCycleClock() {
   return {
     now,
     formattedDate,
+    dayNameOfWeek,
     msRemaining: cycleEnd.getTime() - now.getTime(),
     programDayIndex: Math.max(0, programDayIndex),
   };
@@ -112,9 +119,11 @@ function formatDuration(ms) {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
   return [
     String(hours).padStart(2, '0'),
     String(minutes).padStart(2, '0'),
+    String(seconds).padStart(2, '0'),
   ].join(':');
 }
 
@@ -208,7 +217,7 @@ function computeGroupAverages(selectedOptionIdx, wedChallengeText, daily, weekly
   return { coral: avg(sums.coral), pearl: avg(sums.pearl) };
 }
 
-const PINS_KEY = `student-pins-v1`;
+const PINS_KEY = `student-pins-v2`;
 
 async function loadJSON(key) {
   try {
@@ -222,13 +231,6 @@ async function loadJSON(key) {
 async function saveJSON(key, data) {
   try {
     await setDoc(doc(db, 'wird', key), { value: JSON.stringify(data) });
-    return true;
-  } catch (e) { return false; }
-}
-
-async function saveTextData(key, text) {
-  try {
-    await setDoc(doc(db, 'wird', key), { value: text });
     return true;
   } catch (e) { return false; }
 }
@@ -334,7 +336,8 @@ function CelebrationModal({ onClose }) {
   );
 }
 
-function TopBar({ onExit, title, formattedDate, countdownMs, staticDayLabel }) {
+/* شريط علوي يوضح اليوم والتاريخ الهجري بدون سنة والشريط البرتقالي للوقت */
+function TopBar({ onExit, title, formattedDate, dayNameOfWeek, countdownMs }) {
   return (
     <div style={{ width: '100%', marginBottom: '16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -346,8 +349,11 @@ function TopBar({ onExit, title, formattedDate, countdownMs, staticDayLabel }) {
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '18px', fontWeight: '800', color: '#0f766e' }}>{title}</div>
 
+          {/* عرض اليوم والتاريخ الهجري (اليوم والشهر فقط) بوضوح */}
           <div style={{
-            display: 'inline-block',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
             marginTop: '6px',
             backgroundColor: '#ccfbf1',
             color: '#0f766e',
@@ -357,18 +363,32 @@ function TopBar({ onExit, title, formattedDate, countdownMs, staticDayLabel }) {
             fontSize: '13px',
             fontWeight: '800',
           }}>
-            {staticDayLabel}
+            <span>📅</span>
+            <span>{dayNameOfWeek}</span>
+            <span style={{ fontSize: '11px', opacity: '0.85' }}>({formattedDate})</span>
           </div>
-
-          {formattedDate && <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '4px' }}>📅 {formattedDate}</div>}
         </div>
         <div style={{ width: '40px' }} />
       </div>
 
       {typeof countdownMs === 'number' && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '10px', fontSize: '11px', color: '#0f766e', backgroundColor: '#f0fdfa', border: '1px solid #ccfbf1', borderRadius: '20px', padding: '6px 14px', width: 'fit-content', margin: '10px auto 0' }}>
-          <span>المتبقي لنهاية الورد (الساعة 4:30 عصراً):</span>
-          <span style={{ fontWeight: 'bold', color: '#0d9488', fontFamily: 'monospace', fontSize: '12px' }}>{formatDuration(countdownMs)}</span>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '6px',
+          marginTop: '10px',
+          fontSize: '11px',
+          color: '#c2410c',
+          backgroundColor: '#ffedd5',
+          border: '1px solid #fed7aa',
+          borderRadius: '20px',
+          padding: '6px 14px',
+          width: 'fit-content',
+          margin: '10px auto 0'
+        }}>
+          <span>⏳ المتبقي لنهاية الورد:</span>
+          <span style={{ fontWeight: 'bold', color: '#9a3412', fontFamily: 'monospace', fontSize: '13px' }}>{formatDuration(countdownMs)}</span>
         </div>
       )}
     </div>
@@ -421,17 +441,6 @@ function StudentFlow({ onExit }) {
   const [showCelebration, setShowCelebration] = useState(false);
 
   const availableDays = useMemo(() => buildAvailableDays(), []);
-
-  const studentAvailableDays = useMemo(() => {
-    if (!student) return availableDays;
-    return availableDays.filter(d => {
-      if (d.realDayIdx === 4) {
-        return student.tier === 'third';
-      }
-      return true;
-    });
-  }, [availableDays, student]);
-
   const selectedOptionIdx = useMemo(() => clampToProgramRange(clock.programDayIndex), [clock.programDayIndex]);
 
   useEffect(() => { loadJSON(PINS_KEY).then((data) => setPins(data || {})); }, []);
@@ -449,8 +458,6 @@ function StudentFlow({ onExit }) {
   const currentWedChallengeKey = `wed-challenge_week_${Math.floor(selectedOptionIdx / 7) + 1}`;
 
   useEffect(() => {
-    if (!student) return;
-
     const unsubDaily = onSnapshot(doc(db, 'wird', currentDailyKey), (snap) => {
       if (snap.exists() && snap.data().value) setDaily(JSON.parse(snap.data().value));
       else setDaily({});
@@ -467,7 +474,7 @@ function StudentFlow({ onExit }) {
     });
 
     return () => { unsubDaily(); unsubWeekly(); unsubWed(); };
-  }, [student, currentDailyKey, currentWeeklyKey, currentWedChallengeKey]);
+  }, [currentDailyKey, currentWeeklyKey, currentWedChallengeKey]);
 
   const submitPin = async () => {
     if (!pendingStudent || !pins) return;
@@ -495,6 +502,16 @@ function StudentFlow({ onExit }) {
       localStorage.setItem('saved_student_id', pendingStudent.id);
     }
   };
+
+  const studentAvailableDays = useMemo(() => {
+    if (!student) return availableDays;
+    return availableDays.filter(d => {
+      if (d.realDayIdx === 4) {
+        return student.tier === 'third';
+      }
+      return true;
+    });
+  }, [availableDays, student]);
 
   const items = student ? getVisibleItems(selectedOptionIdx, student.tier, wedChallengeText, studentAvailableDays) : [];
   const myDaily = student ? daily?.[student.id] : null;
@@ -575,7 +592,7 @@ function StudentFlow({ onExit }) {
     }
     return (
       <div>
-        <TopBar onExit={onExit} title="اختاري اسمكِ" staticDayLabel="تسجيل الدخول" />
+        <TopBar onExit={onExit} title="اختاري اسمكِ" formattedDate={clock.formattedDate} dayNameOfWeek={clock.dayNameOfWeek} />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', maxHeight: '480px', overflowY: 'auto', paddingLeft: '4px' }}>
           {STUDENTS.map((s) => {
             const badge = TIER_BADGE[s.tier];
@@ -624,8 +641,8 @@ function StudentFlow({ onExit }) {
         onExit={onExit}
         title={`أهلاً، ${student.name} ${g.emoji}`}
         formattedDate={clock.formattedDate}
+        dayNameOfWeek={clock.dayNameOfWeek}
         countdownMs={clock.msRemaining}
-        staticDayLabel={isRestDay ? 'يوم راحة 🌙' : currentOptionObj.name}
       />
 
       <GroupRace coralPercent={groupAverages.coral} pearlPercent={groupAverages.pearl} />
@@ -870,8 +887,8 @@ function SupervisorDashboard({ onExit, supervisor }) {
         onExit={onExit}
         title={`أهلاً ${supervisor.name} 🪸`}
         formattedDate={clock.formattedDate}
+        dayNameOfWeek={clock.dayNameOfWeek}
         countdownMs={clock.msRemaining}
-        staticDayLabel={isRestDay ? 'يوم راحة 🌙' : optionObj.name}
       />
 
       <GroupRace coralPercent={groupAverages.coral} pearlPercent={groupAverages.pearl} />
